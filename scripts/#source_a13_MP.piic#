@@ -1,0 +1,43 @@
+!  Written by Robert W. Zylka, zylka@iram.fr
+!  created 31.03.2023, version 07.12.2023
+!
+!      execution: piic @scriptName   (.piic is the default extension)
+!
+! template script to run nProc parallel processes
+
+@ mapTPdefs
+sic\defi integer finishedProc finishedProcO /glob
+let souName "??????"    ! the source, e.g. SuperAntennae
+let nikaBand    "13"     ! process NIKA2 A2 data, 1=A1, 3=A3, 13=A1+A3; other names not accepted
+let nProc       ?       ! number of processes, i.e. number of the sub-lists
+let nIterSource ?       ! number of iterations; higher values might be necessary
+let sbSourceIn "none"   ! "single beam source", FITS file name of the source distribution to start the iteration (may include directory)
+@ 'souName'_setMPpar 'sbSourceIn'
+
+sic mkdir red
+sic mkdir stat
+sic dele ERROR* stat/'souName'*_a'nikaBand'*.excl
+outDir red
+for iterSource 0 to nIterSource
+    sic delete finishedA'nikaBand'proc*
+
+!!! submit nProc processes
+    @ mapTPsubmitMP 'iterSource' 'snrMx'
+
+    sic mkdir msA'nikaBand'i'iterSource'
+    sic wait 90
+    system "mv PIIC.* *.log msA"'nikaBand'"i"'iterSource'
+
+!!! wait till all nProc processes are finished
+    @ mapTPwaitMP 'iterSource'
+
+!!! create the weighted iterative average map 'outName'.fits and the weights map 'outName'rgw.fits
+    @ mapTPaverMP 'iterSource'
+
+!!! create the iterative source map 'outName'f'iterSource+1'.fits
+    @ mapTPcreaSource
+    inDir imbfitsDir
+
+    system "mv "'souName'"_a"'nikaBand'"_rgs.LIST "'souName'"_a"'nikaBand'"_rgw.LIST finishedA"'nikaBand'"proc* msA"'nikaBand'"i"'iterSource'
+next
+exit

@@ -1,0 +1,106 @@
+!! SB 2025/05/28 version for IQU
+!! needs mainName and 3 polygons (for I,Q,U) [see below]
+
+sic\define charact cubeName*256 rgwName*256 polName_I*256 polName_Q*256 polName_U*256 cubeNoFits*256
+ 
+let cubeName &1
+let rgwName &2
+let polName_I &3
+let polName_Q &4
+let polName_U &5
+
+init hist
+
+rea 'cubeName'
+let cubeNoFits 'IDFBNAME'                                ! file name without .fits extension
+store IQUs
+
+rea 'rgwName'
+store IQUw
+
+sys "rm -f rmsI.fits rmsQ.fits rmsU.fits"
+
+!! Stokes I
+
+pol 'polName_I'
+take IQUw
+take plane 1
+< 1.e-7
+calc ^ -.5
+rms in
+div 'meanVal'
+rms in
+stor
+
+take IQUs
+take plane 1
+rms in
+take
+* 'rmsDev'
+write rmsI.fits 
+
+!! Stokes Q
+
+pol 'polName_Q'
+take IQUw
+take plane 2
+< 1.e-7
+calc ^ -.5
+rms in
+div 'meanVal'
+rms in
+stor
+
+take IQUs
+take plane 2
+rms in
+take
+* 'rmsDev'
+write rmsQ.fits
+
+!! Stokes U
+
+pol 'polName_U'
+take IQUw
+take plane 3
+< 1.e-7
+calc ^ -.5
+rms in
+div 'meanVal'
+rms in
+stor
+
+take IQUs
+take plane 3
+rms in
+take
+* 'rmsDev'
+write rmsU.fits
+
+! produce cube
+
+rea rmsI.fits
+sic\define double rmsI /like rgData
+let rmsI rgData
+rea rmsQ.fits
+sic\define double rmsQ /like rgData
+let rmsQ rgData
+rea rmsU.fits
+sic\define double rmsU /like rgData
+let rmsU rgData
+
+take IQUs
+interp map /pix 'xincAs' 'yincAS' ! necessary only to reset the SIC/PIIC dim variables
+let rgData[,,1,1] rmsI
+let rgData[,,2,1] rmsQ
+let rgData[,,3,1] rmsU
+
+sys "rm -f "'cubeNoFits'"_rms.fits"            ! delete previously existing file
+write 'cubeNoFits'_rms.fits
+sys "rm -f rmsI.fits rmsQ.fits rmsU.fits"
+
+sic\delete /var rmsI
+sic\delete /var rmsQ
+sic\delete /var rmsU
+
+exit

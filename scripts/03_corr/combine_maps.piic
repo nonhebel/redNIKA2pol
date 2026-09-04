@@ -1,0 +1,101 @@
+! combining individual scans into one map
+! weighting combination by associated rgw fits
+! (spin off script from piic/pro/corr_instr_pol.piic)
+
+! Inputs:
+! -------
+! &1 = directory where fits files are stored 
+! &2 = directory where combined file will be stored
+! &3 = list of the maps of individual scans (I,Q,U cubes), stored in the "fitsDir/" directory
+! &4 = list of rgw maps of individual scans (I,Q,U cubes), stored in the "fitsDir/" directory
+! &5 = output file name
+
+! ------------------------------------------------------
+
+sic\define char*80 iDir
+sic\define char*80 oDir 
+sic\define char*80 mapsList             
+sic\define char*80 rgwList              
+sic\define char*80 outputFile
+
+!-------------------------------------------------------
+
+let iDir &1
+let oDir &2
+let mapsList &3
+let rgwList &4
+let outputFile &5
+
+!------------------------------------------------------
+
+! prepare arrays and check lists are the same length
+
+inDir 'iDir'
+outDir 'oDir'
+
+init inList
+inList 'rgwList'
+sort inlist
+sic\define character*256 olFnIn_rgw /like olFnIn
+sic\define integer nObsIn_rgw
+let nObsIn_rgw nObsIn
+for i 1 to nObsIn_rgw
+ let olFnIn_rgw[i] 'olFnIn[i]'
+next
+
+init inList
+inList 'mapsList'
+sort inList
+sic\define character*256 olFnIn_maps /like olFnIn
+sic\define integer nObsIn_maps
+let nObsIn_maps nObsIn
+for i 1 to nObsIn_maps
+ let olFnIn_maps[i] 'olFnIn[i]'
+next
+
+if nObsIn_maps.ne.nObsIn_rgw then
+   say "Number of indiv RGW in list different from number of indiv. maps"
+   say "ERROR"
+   say 'nObsIn_rgw'" vs. "'nObsIn_maps'
+   return
+end if
+
+! ------------------------------------------------------
+
+rea 'olFnIn_rgw[1]'
+store rgw      ! store in the RGW buffer
+rea 'olFnIn_maps[1]'
+* rgw
+store          ! store result (i.e. signal * rgw) in the BACKUP buffer
+
+if nObsIn_maps.ge.2 then
+   for i 2 to nObsIn_maps
+     rea 'olFnIn_maps[i]'
+     * 'olFnIn_rgw[i]'
+     + backup
+   store       ! overwrite the BACKUP buffer
+   next
+end if
+
+rea 'olFnIn_rgw[1]'
+if nObsIn_rgw.ge.2 then
+   for i 2 to nObsIn_rgw
+       + 'olFnIn_rgw[i]'
+   next
+end if
+calc extre
+< '0.2*ABS(rgMn)' 0.0
+store rgw
+
+take           ! recover the BACKUP buffer
+
+divide rgw     ! divide by the RGW buffer
+
+! save the final map
+
+!outDir 'outDir'
+
+sys "rm -f "'oDirName''outputFile'    ! overwriting previous files
+write 'outputFile'
+
+exit
