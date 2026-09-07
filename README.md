@@ -97,7 +97,7 @@ The final step produces science-ready data products. `source_create_products.py`
 
 To compare the final uncorrected and IP-corrected maps and see the fruits of your noble efforts to mitigate instrumental polarisation from your hard-earned observations, the `plot_uncorrected_v_corrected_maps.py` can be used. The script produces plots of the Stokes I emission overlaid with the magnetic field vectors (polarisation vectors rotated by 90 degrees) of a chosen level of significance. How different the uncorrected and corrected results are will be heavily dependent on the source: As mentioned previously, the IP in the case of NIKA2pol is a leakge from Stokes I to Stokes Q and U. It will therefore be most dominant in regions of bright Stokes I emission. The extent of the emission, however, is also important. Where you have extended emission, the leakage pattern with its positive and negative lobes at least partially cancels out, and the IP appears less strongly than in the case of a point source or a region with a bright central object. This effect is also noticeable in the smoothed version of the maps, which can be produced for varying BSM values by setting `BSM_VALS`. With increasing BSM value, the IP pattern is smoothed out and the difference between the uncorrected and corrected maps decreases. 
 
-![Comparison of uncorrected and IP-corrected final images](figures/W3IRS4/W3IRS4_uncorr_corr_vector_map_bsm1.pdf)
+![Comparison of uncorrected and IP-corrected final images](figures/W3IRS4/W3IRS4_uncorr_corr_vector_map_bsm1.png)
 
 
 
