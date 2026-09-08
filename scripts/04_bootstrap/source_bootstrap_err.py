@@ -1,12 +1,12 @@
 """
-bootstrap_parllel.py
-=====================
-Bootstrap uncertainty of across science maps. 
+source_bootstrap_err.py
+--------------------------
+Bootstrap uncertainty across science maps. 
 
 Overview
 --------
 Starting from a set of individually reduced and corrected cubes 
-(Stokes I, Q, U), this pipeline:
+(Stokes I, Q, U), this script:
 
   1. Optionally smooths each scan to a target BSM using PIIC. 
   2. Draws N_BOOTSTRAP bootstrap resamples of the original scan list and
@@ -25,7 +25,7 @@ Usage
 -----
 Set configuration at the top of the script and then run with
 
-  python bootstrap_parallel.py 
+  python source_bootstrap_err.py 
 
 Pass STAGES = {"all"}`` to run everything, or a subset such as
 {"bootstrap"} to run a single stage. 
@@ -45,9 +45,8 @@ from astropy.io import fits
 # ---------------------------------------------------------------------------
 # Top-level configuration
 # ---------------------------------------------------------------------------
-SOURCE          = ???                                                               # Name of target
-REPO_ROOT       = ???                                                               # Location of repo
-BSM             = 3                                                                 # Desired smoothing (BSM in PIIC)
+SOURCE          = "???"                                                              # Name of target
+BSM             = 1                                                                 # Desired smoothing (BSM in PIIC, 1 for native resolution)
 N_BOOTSTRAP     = 5000                                                              # Number of bootstrap realisations
 N_CORES         = 50                                                                # Number of cores to run on
 STAGES          = {"all"}                                                           # Pipeline stages to execute
@@ -56,7 +55,20 @@ STAGES          = {"all"}                                                       
 # Derived directory paths
 # ---------------------------------------------------------------------------
 
-base                = REPO_ROOT / "reductions" / SOURCE / "04_bootstrap"
+def find_repo_root(marker="setup.sh"):
+    """Walk up from this file's location to find the repo root, identified
+    by the presence of ``marker`` (default: setup.sh)."""
+    path = Path(__file__).resolve()
+    for parent in path.parents:
+        if (parent / marker).exists():
+            return parent
+    raise FileNotFoundError(
+        f"Could not find repo root (no {marker} found in any parent directory)"
+    )
+
+repo_root = find_repo_root()
+
+base                = repo_root / "reductions" / SOURCE / "04_bootstrap"
 red_dir             = base / "red"
 combined_dir        = base / f"combined_bsm{BSM}"
 combined_dir.mkdir(parents=True, exist_ok=True)

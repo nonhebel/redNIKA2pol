@@ -1,0 +1,252 @@
+
+! Adapted from corr_instr_pol.piic from piic/pro
+! Now applied to single science scan, not list
+
+! ----------------------------------------------------
+
+! Stefano Berta
+! 2024/02/08
+! last update 2024/07/18, 2024/11/18
+
+! script to correct the instrumental polarization
+
+! Needs and preparation: 
+! ----------------------
+
+! - science NIKA2-Pol dataset (observed with HWP, i.e. pol. mode)
+! - run the standard PIIC-Pol data reduction of the science dataset with N iterations
+! - take the source map of the last (Nth) iteration,
+!   feed it to the data reduction and run it again with 
+!   zero iterations, now saving the individual scans (wrIndMaps)
+
+! - non-polarized, point-like source (e.g. Uranus) NIKA2-Pol data (e.g. one scan)
+!   (observed with HWP, i.e. pol. mode)
+! - run the standard PIIC-Pol data reduction using the compLeak option.
+!   In this way, the Uranus map will be in Equatorial coordinates, 
+!   BUT the Q,U signal will *not* be rotated by alpha. 
+!   In other words: the map *is* physically rotated by El and parallactic angle, 
+!   but there is no rotation of the values of Q,U
+!   This will be the instr. pol. pattern.
+
+! ------------------------------------------------------
+
+sic\define char*512 iDir
+sic\define char*512 oDir
+sic\define char*512 scienceScan         ! science scan (I, Q, U cube)
+sic\define char*512 leakPat             ! calibrator scan i.e. leakage pattern (also a I,Q,U cube)
+sic\define char*512 leakPatID 		! calibrator scan ID for use in file names
+
+sic\define char*512 scanFilNoFITS       ! scan filename without the .fits extension
+sic\define char*512 leakPatNoFITS	! same as leakPat, but without the .fits extension
+
+sic\define character*512 olFnOut_corr   ! filename of corrected science scan
+
+! ------------------------------------------------------
+
+let iDir &1
+let oDir &2
+let scienceScan &3
+let leakPat &4
+let leakPatID &5
+
+! ------------------------------------------------------
+
+inDir 'iDir'
+outDir 'oDir'
+
+! ------------------------------------------------------
+
+sic\define double paralAngScan          ! avg parallactic angle of each indiv. map/scan [rad]
+sic\define double elevScan              ! avg Elevation of each indiv. map/scan [deg]
+
+sic\define double paralAngLeak          ! avg parallactic angle of leakage (one scan only) [rad]
+sic\define double elevLeak              ! avg Elevation of leakage (one scan only) [deg]
+
+sic\define double alpha                 ! [rad] polarization rotation angle
+
+! ------------------------------------------------------
+
+! set up some important parameters for the FFT (edit the values, if needed)
+
+sic\define double taper_radius1_m	! radius1 of Tukey taper mask for the science maps [arcsec]
+sic\define double taper_radius2_m	! radius2 of Tukey taper mask for the science maps [arcsec]
+sic\define double taper_radius1_k	! radius1 of Tukey taper mask for the kernel in real space [arcsec]
+sic\define double taper_radius2_k	! radius2 of Tukey taper mask for the kernel in real space [arcsec]
+sic\define double taper_radius1_kf	! radius1 of Tukey taper mask for the kernel in Fourier space [m]
+sic\define double taper_radius2_kf	! radius2 of Tukey taper mask for the kernel in Fourier space [m]
+
+let taper_radius1_m 250. 		! [arcsec] to be edited ad hoc for input science maps
+let taper_radius2_m 500. 		! [arcsec] to be edited ad hoc for input science maps
+let taper_radius1_k 60.			! [arcsec] already optimized for the point-like kernel
+let taper_radius2_k 70.			! [arcsec] already optimized for the point-like kernel
+let taper_radius1_kf 22.		! [m] already optimized for the point-like kernel
+let taper_radius2_kf 25.		! [m] already optimized for the point-like kernel
+
+say " "
+say "taper_radius1_m = "'taper_radius1_m'" [arcsec]"
+say "taper_radius2_m = "'taper_radius2_m'" [arcsec]"
+say "taper_radius1_k = "'taper_radius1_k'" [arcsec]"
+say "taper_radius2_k = "'taper_radius2_k'" [arcsec]"
+say "taper_radius1_kf = "'taper_radius1_kf'" [m]"
+say "taper_radius2_kf = "'taper_radius2_kf'" [m]"
+
+! ------------------------------------------------------
+
+! read the original leakage cube 
+! and store its average parallactic angle and Elevation
+
+rea 'leakPat'
+let paralAngLeak 'PARALLANGAV'  ! [rad] read directly from the header of indiv. .fits map
+let elevLeak 'ELMIDD*dtor'      ! [rad] idem
+
+let leakPatNoFITS 'IDFBNAME'
+
+! ------------------------------------------------------
+
+! - read the parallactic angle of each indiv. map [rad]
+! - read the Elevation of each indiv. map [deg]
+! - read the leakage
+! - de-rotate the leakage 
+!   and rotate it to the El and parallactic angle of each indiv. scan/map
+! - produce the instrumental Q, U maps for each scan,
+!   i.e. the instrumental contribution to the Q, U signals
+!   of the science target, for each scan/map
+! - subtract them from the Q, U maps of each scan
+
+sys "rm -f i_sc.fits i_k.fits q_k.fits u_k.fits"
+
+! read in the science scan and store its parallactic angle and elevation
+
+rea 'scienceScan'
+
+let paralAngScan 'PARALLANGAV'  ! [rad] read directly from the header of indiv. .fits map
+let elevScan 'ELMIDD*dtor'      ! [rad] idem
+
+let scanFilNoFITS 'IDFBNAME'		! file name without .fits extension
+
+let olFnOut_corr 'scanFilNoFITS'"_"'leakPatID'"_IP_corrected.fits"
+
+! read and rotate the leakage pattern
+
+rea 'leakPat'
+rotate '(elevScan-elevLeak-paralAngScan+paralAngLeak)*rtod'
+
+! save it
+
+write 'leakPatNoFITS'"_"'leakPatID'"_rot1.fits"
+
+rea 'leakPatNoFITS'"_"'leakPatID'"_rot1.fits"	! read it again (very important)
+
+let alpha 'elevScan-paralAngScan-76.2*dtor+pi/2.-5.6*dtor' 	! [rad]
+
+sic\define double RGDATA_old /like RGDATA
+let RGDATA_old RGDATA
+
+let RGDATA[,,2,1] RGDATA_old[,,2,1]*cos(2*alpha)+RGDATA_old[,,3,1]*sin(2*alpha)     ! rotate the value of Q
+let RGDATA[,,3,1] RGDATA_old[,,2,1]*-1*sin(2*alpha)+RGDATA_old[,,3,1]*cos(2*alpha)  ! rotate the value of U
+
+! save it
+
+write 'leakPatNoFITS'"_"'leakPatID'"_rot2.fits"
+ 
+sic\delete /var RGDATA_old
+
+! finally re-center the manipulated leakage pattern
+! such to have the peak at the central pixel
+
+take plane 1
+gFit max position 0 0
+    
+rea 'leakPatNoFITS'"_"'leakPatID'"_rot2.fits"
+
+shift xy '-1*gfX0as[1]' '-1*gfY0as[1]'
+
+write 'leakPatNoFITS'"_"'leakPatID'"_rot2_cen.fits"
+
+! this is the kernel to be used to produce 
+! the Q, U instrumental polarization (aka leakage) 
+!  maps of the given science scan
+
+! call the CUBE script that computes these maps
+! do it for Q and U separately
+
+! prepare files for the CUBE script
+
+! and also a temporary RGDATA_sc to use later
+
+rea 'scienceScan' 				! science scan I,Q,U cube
+
+sic\define double RGDATA_sc /like RGDATA	! prepare also temporary RG to work on (I,Q,U cube)
+
+let RGDATA_sc RGDATA			! fill it with the original data (indiv I,Q,U cube)
+
+outDir .		! because the CUBE script needs the data in the working directory
+
+take plane 1
+write i_sc.fits
+
+rea 'leakPatNoFITS'"_"'leakPatID'"_rot2_cen.fits"
+take plane 1 
+write i_k.fits
+rea 'leakPatNoFITS'"_"'leakPatID'"_rot2_cen.fits"
+take plane 2 
+write q_k.fits
+rea 'leakPatNoFITS'"_"'leakPatID'"_rot2_cen.fits"
+take plane 3 
+write u_k.fits
+
+outDir 'iDirName'	! set it back as it should be, so that the instr. pol. pattern will be stored there
+
+! compute Q leakage map of the given science scan
+
+sys "cube -nw @ convolve.cube /data i_sc /kernel i_k q_k /band 1mm /fovradius "'taper_radius1_m'" "'taper_radius2_m'" /bearadius "'taper_radius1_k'" "'taper_radius2_k'" /fftradius "'taper_radius1_kf'" "'taper_radius2_kf'   !"/check"
+
+sys "mv "'oDirName'"i_sc-polarized-response.fits "'oDirName''scanFilNoFITS'"_"'leakPatID'"_Q_instr.fits"
+
+! compute U leakage map of the given science scan
+
+sys "cube -nw @ convolve.cube /data i_sc /kernel i_k u_k /band 1mm /fovradius "'taper_radius1_m'" "'taper_radius2_m'" /bearadius "'taper_radius1_k'" "'taper_radius2_k'" /fftradius "'taper_radius1_kf'" "'taper_radius2_kf'   !"/check"
+
+sys "mv "'oDirName'"i_sc-polarized-response.fits "'oDirName''scanFilNoFITS'"_"'leakPatID'"_U_instr.fits"
+    
+! now we have finally (all in the inDir):
+! a) the original scan I,Q,U cube: 'iObs'
+! b) the Q and U leakage patterns of the science maps: 
+!    'scanFilNoFITS'"_Q_instr.fits" and 'scanFilNoFITS'"_U_instr.fits"
+
+! subtract b) from a)
+
+rea 'scanFilNoFITS'"_"'leakPatID'"_Q_instr.fits"
+let RGDATA_sc[,,2,1] RGDATA_sc[,,2,1]-RGDATA[,,1,1]
+
+rea 'scanFilNoFITS'"_"'leakPatID'"_U_instr.fits"
+let RGDATA_sc[,,3,1] RGDATA_sc[,,3,1]-RGDATA[,,1,1]
+
+! save it
+    
+rea 'scienceScan'
+let RGDATA RGDATA_sc
+
+! in case file has already been written
+
+sys "rm -f red/"'olFnOut_corr'    ! overwriting previous files
+write 'olFnOut_corr'
+
+! delete temporary stuff
+
+sic\delete /var RGDATA_sc
+
+sys "rm -f i_sc.fits i_k.fits q_k.fits u_k.fits"
+
+sys "rm -f "'oDirName''scanFilNoFITS'"_"'leakPatID'"_U_instr.fits"
+sys "rm -f "'oDirName''scanFilNoFITS'"_"'leakPatID'"_Q_instr.fits"
+
+sys "rm -f "'oDirName''leakPatNoFITS'"_"'leakPatID'"_rot1.fits"
+sys "rm -f "'oDirName''leakPatNoFITS'"_"'leakPatID'"_rot2.fits"
+sys "rm -f "'oDirName''leakPatNoFITS'"_"'leakPatID'"_rot2_cen.fits"
+
+! ------------------------------------------------------
+
+exit
+
+

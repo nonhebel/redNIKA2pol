@@ -1,0 +1,63 @@
+!  Written by Robert W. Zylka, zylka@iram.fr
+!  created 09.03.2023, version 24.11.2023
+!
+! Internal subroutine; script defining the parameters for multi-core processing of NIKA2 maps.
+!
+! IMPORTANT WARNING!
+! If the maps in the scanning direction are shorter than
+! 2*(souRmxAS+recArRmxAS+HPBW+scanVelocity),
+! where souRmxAS is the source semi-axis in this direction, recArRmxAS the NIKA2 FoV
+! radius, scanVelocity is in (units of souRmxAS,recArRmxAS,HPBW)/s,
+! some crucial processing steps cannot be performed. Consequently, due to inevitable
+! data instabilities (intrinsic to NIKA2 or induced by the chosen mapping strategy),
+! the results in such cases might be questionable.
+!
+! Further notes:
+! - contrary to processing with just one processor the maps size must be defined
+! - For simple structured sources the best might be to define the source region
+!   (as an ellipse or using a polygon) but set the base range to 0:
+!   brRmxAS=0 brRmnAS=0 and polBReq=" " (to be set after mapTPoptionalSets).
+! - As a consequence of very low integration time and data instabilities, at edges
+!   of the iterative maps S/N spikes and/or "instability" sources may appear.
+!   To avoid their propagation while iterating towards the map centre, either polZmEq or
+!   rZmEq should be used.
+! - Defaults are set for Ar2 and not weak sources, i.e. max. signal > 5*rmsOfNIKA2pixel.
+!   The average rmsOfNIKA2pixel is roughly ~33mJy/23.8Hz for Ar2, ~110mJy/23.8Hz for Ar1,
+!   and ~87mJy/23.8Hz for Ar3, but many KIDs show smaller r.m.s. than average,
+!   therefore sources stronger than ~100mJy/2mmBeam and ~350mJy/1mmBeam are "not weak".
+
+!-------------------------------------------- parameter setting ---------------------------------------
+let weakSou   no      ! if yes signal >5*rmsOfNIKA2pixel (see above) masked after the sky noise subtraction
+let deepField no      ! yes for e.g. GOODSNorth, COSMOS, HDF, DeepField1, ...
+let souSign "+"       ! "-" if source with negative signal, e.q. SZ; "+-" if positive and negative sources (used for total power and Stokes I)
+let posSeq " "        ! [H M S D AM AS] centre of the final (R.A.,DEC) map
+                      ! necessary only if individual maps have different centres
+let eqExtrAS    0.0   ! [arcsec] half map extent in EQ, 0 to calculate it (all maps must have the same centre)
+let souRAoffAS  0.0   ! [arcsec] R.A. offset of the source relative to posSeq
+let souDECoffAS 0.0   ! [arcsec] DEC  offset of the source relative to posSeq
+let blOrderOrig 4     ! order of instability corrections in subscans, for compact sources >2 might be better
+if nIterSource.ge.1 then
+   let rZmEq   0.0    ! [arcsec] if >0 outside of this radius the data of the iterative source are neglected
+   let polZmEq " "    ! [arcsec] relative to posSeq, action as for rZmEq but using this polygon
+   let smSNRpar 0.0   ! if >0 S/N is calculated using the smoothed map but the iterative source not smoothed,
+                      ! if <0 also the iterative source smoothed; the ITERATIVE MAPS ARE NEVER SMOOTHED
+end if
+@ mapTPoptionalSets
+!+-------- do not change this ------------
+let wrCumLast yes
+if PRO%nArg.le.0 then
+   let sbSource " "
+ else
+   let sbSource &1
+end if
+!--------- do not change this ------------
+
+!----------------------- Ste's custom prameters -----------------------
+!!let nBest 32           ! use data of nBest best correlating KIDs to calculate CN for the pixel to be filtered
+!----------------------- Run it ! -------------------------------------
+
+let polSeq "source"  ! source polygon
+let polBReq "base"   ! base range polygon
+let rZmEq 400 	     ! using zeroing radius instead of polygon
+
+return

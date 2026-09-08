@@ -7,15 +7,15 @@
 
 @ mapTPdefs
 sic\defi integer finishedProc finishedProcO /glob
-let souName "??????"    ! the source, e.g. SuperAntennae
+let souName "W3IRS4"    ! the source, e.g. SuperAntennae
 let nikaBand    "13"     ! process NIKA2 A2 data, 1=A1, 3=A3, 13=A1+A3; other names not accepted
-let nProc       ?       ! number of processes, i.e. number of the sub-lists
-let nIterSource ?       ! number of iterations; higher values might be necessary
+let nProc       36       ! number of processes, i.e. number of the sub-lists
+let nIterSource 50       ! number of iterations; higher values might be necessary
 let sbSourceIn "none"   ! "single beam source", FITS file name of the source distribution to start the iteration (may include directory)
 @ 'souName'_setMPpar 'sbSourceIn'
 
-sic mkdir red
-sic mkdir stat
+!sic mkdir red
+!sic mkdir stat
 sic dele ERROR* stat/'souName'*_a'nikaBand'*.excl
 outDir red
 for iterSource 0 to nIterSource

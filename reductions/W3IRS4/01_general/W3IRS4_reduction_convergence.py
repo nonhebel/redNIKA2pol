@@ -1,9 +1,32 @@
-
 """
-check_reduction_convergence.py
+source_reduction_convergence.py
 --------------------------
-Plots the RMS for each Stokes parameter and the total intensity recovered, across
-the iterations performed by PIIC.
+Diagnostic plots for checking convergence of maps as a function of iteration
+number.
+
+Workflow
+--------
+Loads all per-iteration I/Q/U cubes for a given source from
+``01_general/red``, and for each iteration:
+
+- computes the RMS of Stokes I, Q and U within PIIC-defined RMS polygon
+- computes the total Stokes I and polarised intensity over the full map
+
+Two figures are produced:
+
+1. RMS convergence — RMS I, Q, U vs. iteration number
+2. Flux convergence — total I and total Ipol vs. iteration number
+
+Each panel annotates the fractional change between the last two
+iterations as a quick convergence check. Figures are saved to
+``figures/{SOURCE}/{SOURCE}_rms_convergence.pdf`` and
+``..._flux_convergence.pdf``.
+
+Usage
+-----
+Set ``SOURCE`` at the top of the file, then run::
+
+    python source_reduction_convergence.py
 """
 
 from pathlib import Path
@@ -22,17 +45,28 @@ from regions import RectangleSkyRegion
 # ---------------------------------------------------------------------------
 # Top-level configuration
 # ---------------------------------------------------------------------------
-SOURCE    = ???
-REPO_ROOT = ???
+SOURCE    = "W3IRS4"
 # ---------------------------------------------------------------------------
-
 try:
     plt.style.use("standard")
 except OSError:
     pass
 
-red_dir = REPO_ROOT / "reductions" / SOURCE / "01_general" / "red"
-fig_dir = REPO_ROOT / "figures" / SOURCE 
+def find_repo_root(marker="setup.sh"):
+    """Walk up from this file's location to find the repo root, identified
+    by the presence of ``marker`` (default: setup.sh)."""
+    path = Path(__file__).resolve()
+    for parent in path.parents:
+        if (parent / marker).exists():
+            return parent
+    raise FileNotFoundError(
+        f"Could not find repo root (no {marker} found in any parent directory)"
+    )
+
+repo_root = find_repo_root()
+
+red_dir = repo_root / "reductions" / SOURCE / "01_general" / "red"
+fig_dir = repo_root  / "figures" / SOURCE 
 fig_dir.mkdir(parents=True, exist_ok=True)
 
 # Infer total number of iterations from filename
@@ -93,7 +127,7 @@ for ax, key, ylabel in rms_panels:
     ax.annotate(f"Δ = {diff:.2f}%", xy=(0.1, 0.9), xycoords="axes fraction")
 
 plt.tight_layout()
-fig.savefig(fig_dir / f"{SOURCE}_rms_convergence.pdf", bbox_inches="tight")
+fig.savefig(fig_dir / f"{SOURCE}_rms_convergence.png", bbox_inches="tight", dpi=300)
 plt.close()
 
 # Figure 2: Intensity
@@ -111,7 +145,7 @@ for ax, key, ylabel in tot_panels:
     ax.annotate(f"Δ = {diff:.2f}%", xy=(0.1, 0.9), xycoords="axes fraction")
 
 plt.tight_layout()
-fig.savefig(fig_dir / f"{SOURCE}_flux_convergence.pdf", bbox_inches="tight")
+fig.savefig(fig_dir / f"{SOURCE}_flux_convergence.png", bbox_inches="tight", dpi=300)
 plt.close()
 
-print(f"Saved {fig_dir}/{SOURCE}_rms_convergence.pdf and {fig_dir}/{SOURCE}_flux_convergence.pdf")
+print(f"Saved {fig_dir}/{SOURCE}_rms_convergence.png and {fig_dir}/{SOURCE}_flux_convergence.png")

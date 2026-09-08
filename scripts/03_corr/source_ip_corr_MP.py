@@ -39,6 +39,8 @@ To run only a subset of stages set::
 To run all stages set::
 
     STAGES = {"all"}
+
+But check README as to whether you want to run with refine!!    
 """
 
 import os
@@ -55,13 +57,12 @@ import numpy as np
 # Top-level configuration
 # ---------------------------------------------------------------------------
 
-# Target and repository
-SOURCE    = ???
-REPO_ROOT = ???
+# Target
+SOURCE    = "???"
 
 # Stages to run — subset of {"correct", "select", "refine", "write_lists",
 # "combine"} or {"all"} to run the full pipeline
-STAGES = {"select", "correct", "select", "write_lists", "combine"}
+STAGES = {"correct", "select", "write_lists", "combine"}
 
 # Save diagnostic figures from each stage
 SAVE_FIGURES = True
@@ -94,8 +95,11 @@ CMAP = "PiYG"
 # (useful for testing)
 SCIENCE_ID_FILTER = None
 
-# Parallelisation
+# Number of cores to run on
 N_CORES = 10
+
+# Manually setting repo root in case of unbalanced quote count - see README
+REPO_ROOT = Path.home() / "redNIKA2pol"
 
 # ---------------------------------------------------------------------------
 # Matplotlib style
@@ -108,13 +112,27 @@ except OSError:
 # ---------------------------------------------------------------------------
 # Derived directory paths
 # ---------------------------------------------------------------------------
-base                = REPO_ROOT / "reductions" / SOURCE / "03_corr"
+def find_repo_root(marker="setup.sh"):
+    """Walk up from this file's location to find the repo root, identified
+    by the presence of ``marker`` (default: setup.sh)."""
+    path = Path(__file__).resolve()
+    for parent in path.parents:
+        if (parent / marker).exists():
+            return parent
+    raise FileNotFoundError(
+        f"Could not find repo root (no {marker} found in any parent directory)"
+    )
+
+if REPO_ROOT == None:
+    repo_root = find_repo_root()
+else:
+    repo_root = REPO_ROOT
+    
+base                = repo_root / "reductions" / SOURCE / "03_corr"
 red_dir             = base / "red"
 red_uncorr_dir      = base / "red_uncorr"
 red_calibrators_dir = base / "red_calibrators"
-fig_dir = (
-    REPO_ROOT / "figures" / SOURCE / "best_calibrators"
-)
+fig_dir             = repo_root / "figures" / SOURCE / "best_calibrators"
 fig_dir.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
@@ -425,8 +443,8 @@ def _figures_select(science_scans, science_scans_corr, calib_catalogue):
             y=1.0 + (0.3 / (4 * n_rows)),
         )
         fig.tight_layout()
-        out_path = fig_dir / f"{science_id}_calibrator_selection_{METRIC}.pdf"
-        fig.savefig(out_path, bbox_inches="tight")
+        out_path = fig_dir / f"{science_id}_calibrator_selection_{METRIC}.png"
+        fig.savefig(out_path, bbox_inches="tight", dpi=300)
         plt.close(fig)
         print(f"  Saved: {out_path}")
 
@@ -502,8 +520,8 @@ def _figures_refine(
                 highlight_axes(axes[row_idx], color="tab:orange")
 
         fig.tight_layout()
-        out_path = fig_dir / f"all_corr_scans_{label}_refinement.pdf"
-        fig.savefig(out_path, bbox_inches="tight")
+        out_path = fig_dir / f"all_corr_scans_{label}_refinement.png"
+        fig.savefig(out_path, bbox_inches="tight", dpi=300)
         plt.close(fig)
         print(f"  Saved: {out_path}")
 
@@ -530,9 +548,15 @@ def stage_select(science_scans, calib_catalogue):
     Q and U for both arrays), and computes the peak absolute residual.
     The calibrator with the lowest metric is selected as ``'best_calib'``.
 
-    Scans whose best-calibrator residual exceeds
-    ``RESIDUAL_THRESHOLD`` are collected in ``bad_scans`` and flagged with a
-    warning.
+    Scans whose *selected* best-calibrator correction still has a
+    ``max_residual`` exceeding ``RESIDUAL_THRESHOLD`` are flagged as
+    ``bad_scans`` and a warning is printed. This is a diagnostic flag only:
+    - In `stage_refine`, bad scans are excluded from the stack std
+      calculation and their calibrator assignment is left unchanged.
+    - They are NOT excluded from `stage_write_lists` or `stage_combine` —
+      they are still written to the LIST files and included in the final
+      combined map. Review flagged scans manually; there is currently no
+      option to drop them from the final product automatically.
     """
     print("\n=== Stage 2: selecting best calibrators ===")
 

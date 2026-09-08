@@ -14,8 +14,8 @@ let nIterSource ?       ! number of iterations; higher values might be necessary
 let sbSourceIn "none"   ! "single beam source", FITS file name of the source distribution to start the iteration (may include directory)
 @ 'souName'_setMPpar 'sbSourceIn'
 
-sic mkdir red
-sic mkdir stat
+!sic mkdir red
+!sic mkdir stat
 sic dele ERROR* stat/'souName'*_a'nikaBand'*.excl
 outDir red
 for iterSource 0 to nIterSource

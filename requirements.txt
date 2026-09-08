@@ -1,0 +1,5 @@
+astropy==7.1.1
+matplotlib==3.11.1
+numpy==2.5.3
+regions==0.11
+tqdm==4.67.3

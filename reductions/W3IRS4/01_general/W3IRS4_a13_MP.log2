@@ -1,0 +1,45 @@
+nohup: ignoring input
+GILDAS Version: jul24 (x86_64-generic) executable tree
+W-SIC,  Session is not interactive, SIC EDIT and SIC MEMORY off
+ 
+PIIC 2026.06.23, Robert W. Zylka with the help of Stefano Berta
+ 
+opLM: The LOG & MES files are PIIC.LOG1 & PIIC.MES1
+      User manon@Node-01 using procedure W3IRS4_a13_MP.piic
+mapTPsubmitMP> sbSourceIn none iterSource 0
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 1 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 2 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 3 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 4 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 5 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 6 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 7 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 8 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 9 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 10 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 11 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 12 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 13 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 14 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 15 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 16 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 17 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 18 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 19 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 20 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 21 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 22 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 23 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 24 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 25 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 26 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 27 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 28 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 29 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 30 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 31 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 32 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 33 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 34 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 35 0 none
+mapTPsubmitMP> piic -nl @mapTPsetMP W3IRS4 13 36 50 0 36 0 none

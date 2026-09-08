@@ -1,0 +1,25 @@
+! apply bsm, i.e. smoothing, to a cube
+
+sic\define char*80 iDir
+sic\define char*80 oDir
+sic\define char*256 mapPath             ! path of map
+sic\define integer bsmVal              ! bsm value to smooth to
+sic\define char*256 scanNoFits
+
+let iDir &1
+let oDir &2
+let mapPath &3
+let bsmVal &4
+
+inDir 'iDir'
+outDir 'oDir'
+
+rea 'mapPath'                                           ! read in observation
+let scanNoFits 'IDFBNAME'                                ! file name without .fits extension
+bsm 'bsmVal'                                             ! smooth map
+sys "rm -f "'scanNoFits'"_bsm"'bsmVal'".fits"            ! delete previously existing file
+write 'scanNoFits'_bsm'bsmVal'.fits                      ! write smoothed map
+
+exit
+
+
