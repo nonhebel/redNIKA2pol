@@ -36,7 +36,7 @@ After cloning, the repo will have the following structure:
       │       └── 05_products/
       └── figures/
 
-Place your raw NIKA2 scan files under `raw/science`. Download the calibrators directory from *somewhere* and place under `raw/calibrators`. The repo is currently set up for the target W3IRS4 as an example (final .FITS files omitted as the data remains unpublished). To generate the same file tree for another target, open up the setup.sh script. Enter your target name and execute the script with ./setup.sh. This will create the same structure as above for your given target, with the necessary scripts for each step of the pipeline where they need to be. Note all scripts should be executed within the directories in which they are found. 
+Place your raw NIKA2 scan files under `raw/science`. Download the calibrators directory from *somewhere* and place under `raw/calibrators`. The repo is currently set up for the target W3IRS4 as an example (final .FITS files omitted as the data remains unpublished). To generate the same file tree for another target, open up the setup.sh script. Enter your target name and execute the script with `./setup.sh`. This will create the same structure as above for your given target, with the necessary scripts for each step of the pipeline where they need to be. Note all scripts should be executed within the directories in which they are found. 
 
 The `*.py` scripts used in the pipeline require a number of Python packages to be installed and have been tested using Python 3.12.4. One can replicate such a conda environment to remove the possbility of compatability issues using:
 
@@ -46,7 +46,7 @@ The conda environment can then be activated using `conda activate redNIKA2pol_en
 
 ## Reducing your data
 
-Now that everything is in the correct place, we can carry out the data reduction. This procedure is separated into 5 different steps, each with a separate direction in `reductions/<targets>`.
+Now that everything is in the correct place, we can carry out the data reduction. This procedure is separated into 5 different steps, each with a separate directory in `reductions/<targets>`.
 
 ### 01_general
 
@@ -60,7 +60,7 @@ The output science map will give a first idea of the source structure, from whic
 
 The second step then produces reduced maps for each individual science scan, using the final source definition (`sbSource`) produced in 01_general (see PIIC 4.16). This is carried out using the script `source_a13_save_ind.piic`, where the parameter `wrIndMaps` has been set to yes. The reduction should be run with the same parameters as above, i.e. the same `smSNRpar` and `blOrderOrig`, as well as the same source and base range polygons, and zeroing radius. By saving individual maps, we can then individually correct them for IP which will vary from scan-to-scan. As above, run the script using:
 
-`nohup piic @ <target>_a13_save_ind.piic > <>target_a13_save_ind.log2 2>&1 &`
+`nohup piic @ <target>_a13_save_ind.piic > <target_a13_save_ind.log2> 2>&1 &`
 
 ### 03_corr
 
@@ -76,7 +76,7 @@ The aim of `source_ip_corr_MP.py` is to correct each science scan with the 'best
 
 `source_ip_corr_MP.py` works by finding candidate calibration scans from the catalogue of scans, for each science scan. It does this by filtering by elevation, selecting only calibrators that are within a user-set `ELEV_THRESH` from the science target, which here we set to 10 degrees. It then finds which calibrator produces the 'best' IP correction for each science scan and produces the final IP corrected science map. It does this through a number of stages:
 
-- **Stage 1) - CORRECT:** Each science scan is corrected for IP with every identified candidate calibrator using `corr_instr_pol.piic`. Note that the version of `corr_instr_pol.piic` used here is *not* identical as the standard script provided in PIIC (i.e. in piic/pro); the script has been modified to work on individual scans rather than scan lists. `corr_instr_pol.piic` corrects for the IP of the science scan via deconvolving the candidate calibrator signal from the science signal, with appropriate scaling by the Stokes I component (see PIIC ). The procedure is carried out for both array 1 and array 3 individually - it is important that this is the case due to focus offsets between the arrays, leading to different IP patterns.
+- **Stage 1) - CORRECT:** Each science scan is corrected for IP with every identified candidate calibrator using `corr_instr_pol.piic`. Note that the version of `corr_instr_pol.piic` used here is *not* identical as the standard script provided in PIIC (i.e. in piic/pro); the script has been modified to work on individual scans rather than scan lists. `corr_instr_pol.piic` corrects for the IP of the science scan via deconvolving the candidate calibrator signal from the science signal, with appropriate scaling by the Stokes I component (see PIIC 6.9). The procedure is carried out for both array 1 and array 3 individually - it is important that this is the case due to focus offsets between the arrays, leading to different IP patterns.
 
 - **Stage 2) - SELECT:** The 'best' calibrator is selected for each science scan. Unlike matching the elevation of the science and calibration measurements, matching the remaining conditions which may influence the IP (e.g. the offset from the optimal focus at the time of observations, variations in the temperature of the telescope etc.) is non-trivial. Instead, the best calibrator is decided *a posteriori*, via a metric calculated for the IP-corrected science maps created using each candidate calibrator. The metric is chosen to be the standard deviation across the inner region of the corrected science map. The reasoning behind this is that the IP signal in Stokes Q and U is known to be cloverleaf pattern with positive and negative lobes, and thus the better the IP correction, the lower the standard deviation should be. The central region of the map is focussed on such that noise at the map-edges doesn't have an impact, through setting the 'CROP_FRACTION'. Moreoever, the IP scales with Stokes I, and the centre of the map, where the bright Stokes I source is present, will be most affected by the IP correction. The metric is calculated for each candidate calibrator, with the best calibrator that which minimises it. A figure is produced of all of the possible IP corrected maps, with the best map highlighted.
 
