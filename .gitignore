@@ -1,2 +1,5 @@
 # raw/processed data
 *.fits
+
+# symlinked calib dir
+raw/calibrators_sym
