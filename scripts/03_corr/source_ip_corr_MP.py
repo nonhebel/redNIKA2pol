@@ -84,7 +84,8 @@ CROP_FRAC = 0.2
 # Filename patterns used to identify scan files — edit if naming
 # convention changes
 SCIENCE_PATTERN = "*-1-*0s.fits"
-CALIB_PATTERN   = "*-1-*compLeakYES*n10.fits"
+# Calibrator files use the new naming convention: {OBJECT}_{scanID}_a1_...
+CALIB_PATTERN   = "*_a1_*n10.fits"
 
 # Diagnostic plot colour scale — units are percentage of Stokes/I (leakage)
 VMIN = -2
@@ -210,19 +211,31 @@ def find_science_scans(directory):
 def build_calib_catalogue(directory):
     """Build catalogue of calibrator scans from ``directory`` matching
     ``CALIB_PATTERN``.
+
+    Calibrator files follow the naming convention
+    ``{OBJECT}_{scanID}_a1_...fits`` (e.g. ``Neptune_20250214s130_a1_...``).
     """
     catalogue = {}
+    skipped = []
     for path in sorted(directory.glob(CALIB_PATTERN)):
-        parts = path.name.split("-1-")
-        calib_id = parts[1].split("_")[0]
+        calib_id = path.name.split("_")[1]
+        path_a3 = Path(str(path).replace("_a1_", "_a3_"))
+        if not path_a3.exists():
+            skipped.append(calib_id)
+            continue
         with fits.open(path) as hdul:
             header = hdul[0].header
         catalogue[calib_id] = {
             "path_a1": path,
-            "path_a3": Path(str(path).replace("-1-", "-3-")),
+            "path_a3": path_a3,
             "object": header.get("OBJECT", ""),
             "elev":   header.get("ELEND", np.nan),
         }
+    if skipped:
+        print(
+            f"WARNING: skipping {len(skipped)} calibrator(s) missing "
+            f"their a3 file: {skipped}"
+        )
     print(
         f"Calibrator catalogue: {len(catalogue)} entries found in {directory}"
     )
