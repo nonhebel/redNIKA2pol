@@ -13,7 +13,7 @@ elevation difference of ``ELEV_DIFF`` degrees) are identified. The
 pipeline is split into five stages which can be run independently via
 the ``STAGES`` configuration variable:
 
-1. correct     — run corr_instr_pol.piic for all scan/calibrator/array
+1. correct     — run corr_instr_pol_1scan.piic for all scan/calibrator/array
                 combinations in parallel (N_CORES workers). Each worker
                 runs PIIC in an isolated tmp_i directory with its own
                 $HOME/.gag/logs to avoid log-file collisions between
@@ -340,7 +340,7 @@ def _make_worker_home(tmp_dir):
     return worker_home
 
 def _run_one_correction(task):
-    """Run corr_instr_pol.piic for one (science, calibrator, array) task.
+    """Run corr_instr_pol_1scan.piic for one (science, calibrator, array) task.
     Runs PIIC inside an isolated tmp_i directory (own cwd and own
     $HOME/.gag/logs) to avoid collisions between concurrent workers.
     """
@@ -361,7 +361,7 @@ def _run_one_correction(task):
 
     command = (
         f"source {REAL_HOME}/.bashrc; gagpiic; "
-        f"piic -nl @ {base}/corr_instr_pol "
+        f"piic -nl @ {base}/corr_instr_pol_1scan "
         f"red red {science_p.name} {calib_p.name} {calib_id} ;"
         f"rm PIIC*"
     )

@@ -47,7 +47,7 @@ setup_target() {
     relink "$(pwd)/reductions/$target/02_individual/red" "reductions/$target/03_corr/red_uncorr"
     relink "$(pwd)/ip_db" "reductions/$target/03_corr/red_calibrators"
     safe_copy "scripts/03_corr/combine_maps.piic" "reductions/$target/03_corr/combine_maps.piic"
-    safe_copy "scripts/03_corr/corr_instr_pol.piic" "reductions/$target/03_corr/corr_instr_pol.piic"
+    safe_copy "scripts/03_corr/corr_instr_pol_1scan.piic" "reductions/$target/03_corr/corr_instr_pol_1scan.piic"
     safe_copy "scripts/03_corr/source_ip_corr_MP.py" "reductions/$target/03_corr/${target}_ip_corr_MP.py"
  
     # 04_bootstrap
