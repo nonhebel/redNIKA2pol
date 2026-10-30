@@ -2,7 +2,7 @@
 
 Welcome to the GitHub page outlining the data reduction pipeline used by the DYNAMAG large programme for the reduction of NIKA2 polarimetry data, including the correction of instrumental polarisation. Scripts are shared here to help others similarly reducing NIKA2pol data - if you use them please acknowledge this page and the associated paper when it comes out (Nonhebel et al. in prep)! While the scripts provided here are intended to be general, in places choices have been made specific to the dataset in question that may not be the best fit for all data.
 
-The scripts provided here are a mix of Python and PIIC scripts. The Pointing and Imaging in Continuum (PIIC) software is the data reduction pipeline provided by IRAM. For information on PIIC, please see the very helpful handbook (https://www.iram.fr/~gildas/dist/piic.pdf), which outlines the installation and usage of PIIC. The pipeline introduced here makes use of many of the core PIIC scripts, with additional scripts to ease especially the process of correcting for instrumental polarisation. The main novelties are `source_ip_corr_MP.py` and `source_bootstrap_err.py` scripts, which make use of a catalogue of calibration scans to correct for instrumental polarisation in an automised way. 
+The scripts provided here are a mix of Python and PIIC scripts. The Pointing and Imaging in Continuum (PIIC) software is the data reduction pipeline provided by IRAM. For information on PIIC, please see the very helpful handbook (https://www.iram.fr/~gildas/dist/piic.pdf), which outlines the installation and usage of PIIC. The pipeline introduced here makes use of many of the core PIIC scripts, with additional scripts to ease especially the process of correcting for instrumental polarisation. The main novelties are `source_ip_corr_MP.py` and `source_bootstrap_err.py` scripts, which make use of a database of calibration scans to correct for instrumental polarisation in an automised way. 
 
 The pipeline is not perfect and likely improvements could be made - feel free to get in touch with suggestions or questions. 
 
@@ -20,7 +20,7 @@ After cloning, the repo will have the following structure:
       ├── requirements.txt 
       ├── raw/
       │   ├── science/
-      │   └── calibrators/
+      ├── ip_db/
       ├── scripts/
       │   ├── 01_general/
       │   ├── 02_individual/
@@ -36,7 +36,7 @@ After cloning, the repo will have the following structure:
       │       └── 05_products/
       └── figures/
 
-Place your raw NIKA2 scan files under `raw/science`. Download the calibrators directory from *somewhere* and place under `raw/calibrators`. The repo is currently set up for the target W3IRS4 as an example (final .FITS files omitted as the data remains unpublished). To generate the same file tree for another target, open up the setup.sh script. Enter your target name and execute the script with `./setup.sh`. This will create the same structure as above for your given target, with the necessary scripts for each step of the pipeline where they need to be. Note all scripts should be executed within the directories in which they are found. 
+Place your raw NIKA2 scan files under `raw/science`. Download the database of instrumental polarisation patterns from *somewhere* and place the scans in `ip_db`. The repo is currently set up for the target W3IRS4 as an example (final .FITS files omitted as the data remains unpublished). To generate the same file tree for another target, open up the setup.sh script. Enter your target name and execute the script with `./setup.sh`. This will create the same structure as above for your given target, with the necessary scripts for each step of the pipeline where they need to be. Note all scripts should be executed within the directories in which they are found. 
 
 The `*.py` scripts used in the pipeline require a number of Python packages to be installed and have been tested using Python 3.12.4. One can replicate such a conda environment to remove the possbility of compatability issues using:
 
@@ -72,7 +72,7 @@ Here we don't limit ourselves to calibration measurements taken before and after
 
 #### source_ip_corr_MP.py
 
-The aim of `source_ip_corr_MP.py` is to correct each science scan with the 'best' calibrator scan from a catalogue of such scans (scans placed in `raw/calibrators`). This catalogue was produced by reducing all available planet calibration scans (polarised calib_1scans) from the nikas-24, nikaw-24, nikas-25, nikaw-25 and 084-25 projects. The catalogue will be expanded to include planet observations from other projects in the future. The observations cover a large range of observing conditions and thus IP patterns. 
+The aim of `source_ip_corr_MP.py` is to correct each science scan with the 'best' calibrator scan from a catalogue of such scans (scans placed in `ip_db`). This catalogue contains all available planet calibration scans (polarised calib_1scans) taken during the NIKA2pol observing campaign to date. The observations cover a large range of observing conditions and thus IP patterns. 
 
 `source_ip_corr_MP.py` works by finding candidate calibration scans from the catalogue of scans, for each science scan. It does this by filtering by elevation, selecting only calibrators that are within a user-set `ELEV_THRESH` from the science target, which here we set to 10 degrees. It then finds which calibrator produces the 'best' IP correction for each science scan and produces the final IP corrected science map. It does this through a number of stages:
 
