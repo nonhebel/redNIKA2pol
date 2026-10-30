@@ -73,4 +73,4 @@ setup_target() {
     echo "Set up $target"
 }
  
-setup_target "$SOURCE" "raw/science"
+setup_target "$SOURCE" "raw"

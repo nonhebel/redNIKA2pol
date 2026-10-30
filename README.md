@@ -19,14 +19,13 @@ After cloning, the repo will have the following structure:
       ├── setup.sh
       ├── requirements.txt 
       ├── raw/
-      │   ├── science/
       ├── ip_db/
       ├── scripts/
       │   ├── 01_general/
       │   ├── 02_individual/
       │   ├── 03_corr/
       │   ├── 04_bootstrap/
-      │   ├── 05_products/
+      │   ├── 05_products/to
       ├── reductions/
       │   └── <target>/
       │       ├── 01_general/
@@ -36,7 +35,7 @@ After cloning, the repo will have the following structure:
       │       └── 05_products/
       └── figures/
 
-Place your raw NIKA2 scan files under `raw/science`. Download the database of instrumental polarisation patterns from *somewhere* and place the scans in `ip_db`. The repo is currently set up for the target W3IRS4 as an example (final .FITS files omitted as the data remains unpublished). To generate the same file tree for another target, open up the setup.sh script. Enter your target name and execute the script with `./setup.sh`. This will create the same structure as above for your given target, with the necessary scripts for each step of the pipeline where they need to be. Note all scripts should be executed within the directories in which they are found. 
+Place your raw NIKA2 scan files under `raw/`. Download the database of instrumental polarisation patterns from *somewhere* and place the scans in `ip_db/`. The repo is currently set up for the target W3IRS4 as an example (final .FITS files omitted as the data remains unpublished). To generate the same file tree for another target, open up the setup.sh script. Enter your target name and execute the script with `./setup.sh`. This will create the same structure as above for your given target, with the necessary scripts for each step of the pipeline where they need to be. Note all scripts should be executed within the directories in which they are found. 
 
 The `*.py` scripts used in the pipeline require a number of Python packages to be installed and have been tested using Python 3.12.4. One can replicate such a conda environment to remove the possbility of compatability issues using:
 
