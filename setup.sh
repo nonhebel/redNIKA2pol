@@ -66,6 +66,10 @@ setup_target() {
     safe_copy "scripts/05_products/creaRMS_IQU.piic" "reductions/$target/05_products/creaRMS_IQU.piic"
     safe_copy "scripts/05_products/source_create_products.py" "reductions/$target/05_products/${target}_create_products.py"
     safe_copy "scripts/05_products/source_uncorrected_v_corrected.py" "reductions/$target/05_products/${target}_uncorrected_v_corrected.py"
+    
+    # figures
+    mkdir -p "figures/$target"
+
     echo "Set up $target"
 }
  
