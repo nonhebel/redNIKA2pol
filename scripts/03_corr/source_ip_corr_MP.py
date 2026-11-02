@@ -44,56 +44,52 @@ But check README as to whether you want to run with refine!!
 """
 
 import os
+import sys
 import subprocess
 import random
 import shutil
 from pathlib import Path
 from astropy.io import fits
 from multiprocessing import Pool
+import matplotlib
+matplotlib.use("Agg")          # save figures without a display (safe after logout)
 import matplotlib.pyplot as plt
 import numpy as np
+from collections import Counter
+from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
 # Top-level configuration
 # ---------------------------------------------------------------------------
 
 # Target
-SOURCE    = "???"
+SOURCE = "???"
 
 # Stages to run — subset of {"correct", "select", "refine", "write_lists",
 # "combine"} or {"all"} to run the full pipeline
 STAGES = {"correct", "select", "write_lists", "combine"}
 
-# Save diagnostic figures from each stage
+# Save diagnostic figures from each stage, note that if too many candidate 
+# calibrators, may crash if SAVE_FIGURES = TRUE
 SAVE_FIGURES = True
 
-# Calibrator requirements
-# Limiting to planets avoids needing a QSO polarisation correction
-CALIBRATORS = ("Uranus", "Neptune", "Mars", "Mercury")
 # Maximum elevation difference (degrees) between calibrator and science scan
 ELEV_DIFF = 10
+
 # Flag scans with residuals above this fraction of Imax
 RESIDUAL_THRESHOLD = 5
 
 # Metric used to select and refine the best calibrator per scan
 # Options: "std", "max", "sum" — evaluated over the central CROP_FRAC
 # of each map
-METRIC    = "std"
+METRIC = "std"
 CROP_FRAC = 0.2
-
-# Filename patterns used to identify scan files — edit if naming
-# convention changes
-SCIENCE_PATTERN = "*-1-*0s.fits"
-# Calibrator files use the new naming convention: {OBJECT}_{scanID}_a1_...
-CALIB_PATTERN   = "*_a1_*n10.fits"
 
 # Tukey taper radii for the science map [arcsec] — inner, outer
 TAPER_RADII = (250, 500)
 
 # Diagnostic plot colour scale — units are percentage of Stokes/I (leakage)
-VMIN = -2
-VMAX =  2
-CMAP = "PiYG"
+VLIM = 2
 
 # Set to a specific science scan ID to process only that scan
 # (useful for testing)
@@ -143,15 +139,22 @@ fig_dir.mkdir(parents=True, exist_ok=True)
 # Pipeline command wrappers
 # ---------------------------------------------------------------------------
 
-def run_combination(maps_list, rgw_list, outpath): 
+def run_combination(maps_list, rgw_list, outpath):
     """Run ``combine_maps.piic`` to co-add a set of maps."""
     command = (
         f"source ~/.bashrc; gagpiic; piic -nl @ combine_maps "
-        f"red red {maps_list} {rgw_list} {outpath} ;"
-        f"rm PIIC* "
+        f"red red {maps_list} {rgw_list} {outpath} ; "
+        f"rm -f PIIC*"
     )
-    print("RUN:", command)
-    subprocess.run(command, shell=True, executable="/bin/bash", check=True)
+    log_path = base / "combine.log"
+    print(f"  Running combine_maps")
+
+    with open(log_path, "w") as log:
+        subprocess.run(
+            command, shell=True, executable="/bin/bash",
+            cwd=base,                                  # run from 03_corr/
+            stdout=log, stderr=subprocess.STDOUT,
+        )
 
 # ---------------------------------------------------------------------------
 # Helper functions
@@ -176,7 +179,7 @@ def crop_center(data, crop_frac = CROP_FRAC):
 def plot_map(ax, data, title, cbar_label):
     """Plot the central crop of a 2D map on ``ax``."""
     cropped = crop_center(data)
-    im = ax.imshow(cropped, origin="lower", cmap=CMAP, vmin=VMIN, vmax=VMAX)
+    im = ax.imshow(cropped, origin="lower", cmap="PiYG", vmin=-VLIM, vmax=VLIM)
     ax.tick_params(labelbottom=False, labelleft=False)
     ax.text(
         0.95, 0.1, 
@@ -196,9 +199,13 @@ def highlight_axes(axes, color, linewidth = 3):
             spine.set_linewidth(linewidth)
 
 def find_science_scans(directory):
-    """Find science scans in ``directory`` matching ``SCIENCE_PATTERN``."""
+    """Find science scans in ``directory``.
+
+    Expects files named ``...-1-{scanID}_...0s.fits`` (array 1); the matching
+    array-3 file is assumed to have ``-3-`` in place of ``-1-``.
+    """
     science_scans = {}
-    for path in sorted(directory.glob(SCIENCE_PATTERN)): 
+    for path in sorted(directory.glob("*-1-*0s.fits")):
         parts = path.name.split("-1-")
         science_id = parts[1].split("_")[0]
         with fits.open(path) as hdul:
@@ -212,15 +219,15 @@ def find_science_scans(directory):
     return science_scans
 
 def build_calib_catalogue(directory):
-    """Build catalogue of calibrator scans from ``directory`` matching
-    ``CALIB_PATTERN``.
+    """Build catalogue of calibrator scans from ``directory``.
 
-    Calibrator files follow the naming convention
-    ``{OBJECT}_{scanID}_a1_...fits`` (e.g. ``Neptune_20250214s130_a1_...``).
+    Expects files named ``{OBJECT}_{scanID}_a1_...n10.fits``
+    (e.g. ``Neptune_20250214s130_a1_...``); the matching array-3 file is
+    assumed to have ``_a3_`` in place of ``_a1_``.
     """
     catalogue = {}
     skipped = []
-    for path in sorted(directory.glob(CALIB_PATTERN)):
+    for path in sorted(directory.glob("*_a1_*n10.fits")):
         calib_id = path.name.split("_")[1]
         path_a3 = Path(str(path).replace("_a1_", "_a3_"))
         if not path_a3.exists():
@@ -247,13 +254,11 @@ def build_calib_catalogue(directory):
 def find_candidate_calibrators(
     science_scans, 
     calib_catalogue, 
-    allowed_calibrators=CALIBRATORS, 
     elev_diff=ELEV_DIFF
 ):
     """Assign candidate calibrators to each science scan.
 
-    A calibrator is a candidate if its object name is in
-    ``allowed_calibrators`` and its elevation is within ``elev_diff``
+    A calibrator is a candidate if its elevation is within ``elev_diff``
     degrees of the science scan. The entry ``'Uncorrected'`` is
     always prepended as a baseline option.
     """
@@ -261,12 +266,11 @@ def find_candidate_calibrators(
         science_meta['candidate_calibrators'] = ['Uncorrected'] + [
             calib_id 
             for calib_id, calib_meta in calib_catalogue.items()
-            if calib_meta["object"] in allowed_calibrators and 
-            abs(calib_meta["elev"] - science_meta["elev"]) <= elev_diff
+            if abs(calib_meta["elev"] - science_meta["elev"]) <= elev_diff
         ]
         print(
             f"  {science_id}: elev={science_meta['elev']:.2f}° "
-            f"-> {len(science_meta['candidate_calibrators'])} "
+            f"-> {len(science_meta['candidate_calibrators'])-1} "
             f"matching calibrators"
         )
     return science_scans
@@ -318,7 +322,7 @@ def _build_correction_tasks(science_scans, calib_catalogue):
                 final_p = red_dir / f"{science_p.stem}_{calib_id}_IP_corrected.fits"
                 if final_p.exists():
                     continue
-                tasks.append((science_p, calib_p, calib_id, final_p))
+                tasks.append((science_p, science_id, calib_p, calib_id, final_p))
     return [(i, *task) for i, task in enumerate(tasks)]  # index each task
 
 def _make_worker_home(tmp_dir):
@@ -347,7 +351,7 @@ def _run_one_correction(task):
     Runs PIIC inside an isolated tmp_i directory (own cwd and own
     $HOME/.gag/logs) to avoid collisions between concurrent workers.
     """
-    i, science_p, calib_p, calib_id, final_p = task
+    i, science_p, science_id, calib_p, calib_id, final_p = task
     tmp_dir = base / f"tmp_{i}" 
     tmp_dir.mkdir(parents=True, exist_ok=True)
     tmp_red = tmp_dir / "red"
@@ -370,11 +374,17 @@ def _run_one_correction(task):
         f"rm PIIC*"
     )
 
+    log_path = tmp_dir / "piic_stdout.log2"
+
+    success = False
+
     try:
-        subprocess.run(
-            command, shell=True, executable="/bin/bash",
-            cwd=tmp_dir, env=env, check=True,
-        )
+        with open(log_path, "w") as log:
+            subprocess.run(
+                command, shell=True, executable="/bin/bash",
+                cwd=tmp_dir, env=env, check=True,
+                stdout=log, stderr=subprocess.STDOUT,   
+            )
 
         out = tmp_red / final_p.name
 
@@ -383,13 +393,14 @@ def _run_one_correction(task):
             out.replace(red_dir / final_p.name)
 
     except subprocess.CalledProcessError:
-        success = False
+        pass
 
     finally:
-        if not KEEP_TMP:
+        if success and not KEEP_TMP:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    return {"science": science_p.stem, "calib": calib_id, "success": success}
+    return {"science_id": science_id, "science": science_p.stem,
+            "calib": calib_id, "success": success, "log": str(log_path)}
 
 # ---------------------------------------------------------------------------
 # Internal figure functions
@@ -549,13 +560,61 @@ def _figures_refine(
 def stage_correct(science_scans, calib_catalogue):
     print("\n=== Stage 1: running IP corrections (parallel) ===")
     tasks = _build_correction_tasks(science_scans, calib_catalogue)
-    print(f"  {len(tasks)} corrections to run")
+    if not tasks:
+        print("  Nothing to do: all corrections already exist.")
+        return
 
-    with Pool(N_CORES) as pool:
+    totals = Counter(t[2] for t in tasks) 
+    done = Counter()
+    failed = Counter()
+    scan_bars = {}
+    failures = []
+
+    print(f"  {len(tasks)} corrections over {len(totals)} science IDs "
+      f"({2 * len(totals)} A1/A3 maps)")
+
+    sys.stdout.reconfigure(line_buffering=True)
+    interactive = sys.stderr.isatty()
+
+    with Pool(N_CORES) as pool, \
+         tqdm(total=len(tasks), desc="All scans", unit="run",
+              position=0, smoothing=0,
+              disable=not interactive) as overall:
+
         for result in pool.imap_unordered(_run_one_correction, tasks):
-            status = "ok" if result["success"] else "FAILED"
-            print(f"  {result['science']} + {result['calib']}: {status}")
-                        
+            sid = result["science_id"]
+
+            if sid not in scan_bars:
+                scan_bars[sid] = tqdm(
+                    total=totals[sid], desc=f"  {sid}", unit="run",
+                    leave=False, disable=not interactive,
+                )
+            bar = scan_bars[sid]
+
+            bar.update(1)
+            overall.update(1)
+            done[sid] += 1
+
+            if not result["success"]:
+                failed[sid] += 1
+                failures.append(result)
+                bar.set_postfix(failed=failed[sid])
+
+            # scan finished: remove its bar and print one summary line
+            if done[sid] == totals[sid]:
+                bar.close()
+                del scan_bars[sid]
+                status = "all ok" if failed[sid] == 0 else f"{failed[sid]} FAILED"
+                overall.write(f"  {sid}: {totals[sid]} corrections, {status}")
+
+    print(f"  Done: {len(tasks) - len(failures)} succeeded, {len(failures)} failed")
+    if failures:
+        fail_path = base / "failed_corrections.txt"
+        with open(fail_path, "w") as f:
+            for r in failures:
+                f.write(f"{r['science']}\t{r['calib']}\t{r['log']}\n")
+        print(f"  Failed list written to {fail_path}")
+    
 def stage_select(science_scans, calib_catalogue):
     """Stage 2 — load corrected maps and select the best calibrator per
     scan.
@@ -641,11 +700,15 @@ def stage_select(science_scans, calib_catalogue):
             key=lambda c: science_scans_corr[science_id][c]['metric']
         )
 
-        print(f"Best calibrator: {best_calib}")
+        best = science_scans_corr[science_id][best_calib]
+        print(
+            f"  {science_id}: best calibrator = {best_calib} "
+            f"({METRIC} = {best['metric']:.2f}, "
+            f"max residual = {best['max_residual']:.2f}%)"
+        )
         science_scans[science_id]['best_calib'] = best_calib
 
-    # Identifying 'bad scans' - where remaining IP signal is unrealistically
-    # large
+    # Identifying 'bad scans' - where remaining IP signal is above threshold
     bad_scans = {
         sid for sid, meta in science_scans.items()
         if science_scans_corr[sid][meta['best_calib']]['max_residual']
@@ -836,7 +899,18 @@ def stage_combine():
     maps_path = "all_corr_maps.LIST"
     rgw_path  = "all_rgw.LIST"
     combined_output = f"{SOURCE}_IP_corrected.fits"
+    out = red_dir / combined_output
+    log_path = base / "combine.log"
+
+    out.unlink(missing_ok=True)   # remove any old result first
+
     run_combination(maps_path, rgw_path, combined_output)
+
+    if out.exists():
+        log_path.unlink(missing_ok=True)
+        print(f"  Combined map written to {out}")
+    else:
+        print(f"  WARNING: {out} not found, log kept at {log_path}")
      
 # ---------------------------------------------------------------------------
 # Main

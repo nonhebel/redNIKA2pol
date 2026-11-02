@@ -7,7 +7,7 @@
 ! 2026/10/30 version modified by Mairi Nonhebel, to work with only one science scan 
 ! at a time, instead of a list of scans.
 
- Main changes:
+! Main changes:
 ! - single science scan per call, no RGW list and no final combination
 !   (done afterwards by combine_maps.piic)
 ! - calibrator ID (&3) appended to all output/intermediate file names,
@@ -50,8 +50,6 @@
 
 ! ------------------------------------------------------
 
-!sic\define char*512 iDir
-!sic\define char*512 oDir
 sic\define char*512 scienceScan         ! science scan (I, Q, U cube)
 sic\define char*512 leakPat             ! calibrator scan i.e. leakage pattern (also a I,Q,U cube)
 sic\define char*512 leakPatID 		! calibrator scan ID for use in file names
@@ -65,8 +63,6 @@ sic\define character*512 olFnOut_corr   ! filename of corrected science scan
 
 ! ------------------------------------------------------
 
-!let iDir &1
-!let oDir &2
 let scienceScan &1
 let leakPat &2
 let leakPatID &3
