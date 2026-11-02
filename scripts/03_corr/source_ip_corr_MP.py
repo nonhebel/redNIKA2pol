@@ -87,6 +87,9 @@ SCIENCE_PATTERN = "*-1-*0s.fits"
 # Calibrator files use the new naming convention: {OBJECT}_{scanID}_a1_...
 CALIB_PATTERN   = "*_a1_*n10.fits"
 
+# Tukey taper radii for the science map [arcsec] — inner, outer
+TAPER_RADII = (250, 500)
+
 # Diagnostic plot colour scale — units are percentage of Stokes/I (leakage)
 VMIN = -2
 VMAX =  2
@@ -362,7 +365,8 @@ def _run_one_correction(task):
     command = (
         f"source {REAL_HOME}/.bashrc; gagpiic; "
         f"piic -nl @ {base}/corr_instr_pol_1scan "
-        f"red red {science_p.name} {calib_p.name} {calib_id} ;"
+        f"{science_p.name} {calib_p.name} {calib_id} "
+        f"{TAPER_RADII[0]} {TAPER_RADII[1]} ;"
         f"rm PIIC*"
     )
 

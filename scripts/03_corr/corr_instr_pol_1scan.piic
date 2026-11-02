@@ -1,14 +1,34 @@
-
-! Adapted from corr_instr_pol.piic from piic/pro
-! Now applied to single science scan, not list
-
-! ----------------------------------------------------
-
 ! Stefano Berta
 ! 2024/02/08
 ! last update 2024/07/18, 2024/11/18
 
 ! script to correct the instrumental polarization
+
+! 2026/10/30 version modified by Mairi Nonhebel, to work with only one science scan 
+! at a time, instead of a list of scans.
+
+ Main changes:
+! - single science scan per call, no RGW list and no final combination
+!   (done afterwards by combine_maps.piic)
+! - calibrator ID (&3) appended to all output/intermediate file names,
+!   so the same science scan can be corrected with several calibrators
+! - inner/outer Tukey taper radii for the science map passed as inputs
+!   (&4, &5) instead of being hardcoded
+
+! Inputs:
+! -------
+! &1 = science scan (I,Q,U cube), stored in "red/"
+! &2 = instrumental polarization pattern (calibrator I,Q,U cube, one scan only),
+!      stored in "red/"
+! &3 = calibrator scan ID, used in output file names
+! &4 = inner radius of the Tukey taper mask for the science map [arcsec]
+!      (taper_radius1_m, e.g. 250)
+! &5 = outer radius of the Tukey taper mask for the science map [arcsec]
+!      (taper_radius2_m, e.g. 500); must be larger than &4
+ 
+! Output:
+! -------
+! red/<science scan>_<calibrator ID>_IP_corrected.fits
 
 ! Needs and preparation: 
 ! ----------------------
@@ -30,11 +50,13 @@
 
 ! ------------------------------------------------------
 
-sic\define char*512 iDir
-sic\define char*512 oDir
+!sic\define char*512 iDir
+!sic\define char*512 oDir
 sic\define char*512 scienceScan         ! science scan (I, Q, U cube)
 sic\define char*512 leakPat             ! calibrator scan i.e. leakage pattern (also a I,Q,U cube)
 sic\define char*512 leakPatID 		! calibrator scan ID for use in file names
+sic\define double taper_radius1_m	! radius1 of Tukey taper mask for the science maps [arcsec]
+sic\define double taper_radius2_m	! radius2 of Tukey taper mask for the science maps [arcsec]
 
 sic\define char*512 scanFilNoFITS       ! scan filename without the .fits extension
 sic\define char*512 leakPatNoFITS	! same as leakPat, but without the .fits extension
@@ -43,16 +65,18 @@ sic\define character*512 olFnOut_corr   ! filename of corrected science scan
 
 ! ------------------------------------------------------
 
-let iDir &1
-let oDir &2
-let scienceScan &3
-let leakPat &4
-let leakPatID &5
+!let iDir &1
+!let oDir &2
+let scienceScan &1
+let leakPat &2
+let leakPatID &3
+let taper_radius1_m &4
+let taper_radius2_m &5
 
 ! ------------------------------------------------------
 
-inDir 'iDir'
-outDir 'oDir'
+inDir red
+outDir 'iDirName'
 
 ! ------------------------------------------------------
 
@@ -68,8 +92,6 @@ sic\define double alpha                 ! [rad] polarization rotation angle
 
 ! set up some important parameters for the FFT (edit the values, if needed)
 
-sic\define double taper_radius1_m	! radius1 of Tukey taper mask for the science maps [arcsec]
-sic\define double taper_radius2_m	! radius2 of Tukey taper mask for the science maps [arcsec]
 sic\define double taper_radius1_k	! radius1 of Tukey taper mask for the kernel in real space [arcsec]
 sic\define double taper_radius2_k	! radius2 of Tukey taper mask for the kernel in real space [arcsec]
 sic\define double taper_radius1_kf	! radius1 of Tukey taper mask for the kernel in Fourier space [m]
@@ -199,13 +221,13 @@ outDir 'iDirName'	! set it back as it should be, so that the instr. pol. pattern
 
 ! compute Q leakage map of the given science scan
 
-sys "cube -nw @ convolve.cube /data i_sc /kernel i_k q_k /band 1mm /fovradius "'taper_radius1_m'" "'taper_radius2_m'" /bearadius "'taper_radius1_k'" "'taper_radius2_k'" /fftradius "'taper_radius1_kf'" "'taper_radius2_kf'   !"/check"
+sys "cube -nw -nl @ convolve.cube /data i_sc /kernel i_k q_k /band 1mm /fovradius "'taper_radius1_m'" "'taper_radius2_m'" /bearadius "'taper_radius1_k'" "'taper_radius2_k'" /fftradius "'taper_radius1_kf'" "'taper_radius2_kf'   !"/check"
 
 sys "mv "'oDirName'"i_sc-polarized-response.fits "'oDirName''scanFilNoFITS'"_"'leakPatID'"_Q_instr.fits"
 
 ! compute U leakage map of the given science scan
 
-sys "cube -nw @ convolve.cube /data i_sc /kernel i_k u_k /band 1mm /fovradius "'taper_radius1_m'" "'taper_radius2_m'" /bearadius "'taper_radius1_k'" "'taper_radius2_k'" /fftradius "'taper_radius1_kf'" "'taper_radius2_kf'   !"/check"
+sys "cube -nw -nl @ convolve.cube /data i_sc /kernel i_k u_k /band 1mm /fovradius "'taper_radius1_m'" "'taper_radius2_m'" /bearadius "'taper_radius1_k'" "'taper_radius2_k'" /fftradius "'taper_radius1_kf'" "'taper_radius2_kf'   !"/check"
 
 sys "mv "'oDirName'"i_sc-polarized-response.fits "'oDirName''scanFilNoFITS'"_"'leakPatID'"_U_instr.fits"
     
@@ -229,7 +251,7 @@ let RGDATA RGDATA_sc
 
 ! in case file has already been written
 
-sys "rm -f red/"'olFnOut_corr'    ! overwriting previous files
+sys "rm -f "'oDirName'"/"'olFnOut_corr'    ! overwriting previous files
 write 'olFnOut_corr'
 
 ! delete temporary stuff
@@ -248,5 +270,6 @@ sys "rm -f "'oDirName''leakPatNoFITS'"_"'leakPatID'"_rot2_cen.fits"
 ! ------------------------------------------------------
 
 exit
+
 
 
