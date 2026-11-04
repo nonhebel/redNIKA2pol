@@ -1,3 +1,4 @@
 # raw/processed data
 *.fits
 reductions/W3H2O
+figures/W3H2O
