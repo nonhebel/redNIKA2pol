@@ -13,9 +13,11 @@ running standard deviation of Stokes Q and U at two representative pixels
 realisations included. This is used to check whether enough bootstrap
 realisations have been generated for the noise estimates to stabilise.
 
-The resulting convergence plot (STD vs. number of realisations, for both
+The resulting convergence plot (stdv vs. number of realisations, for both
 pixels and both Stokes parameters) is saved to
 ``figures/{SOURCE}/{SOURCE}_bootstrap_convergence_bsm{BSM}.pdf``.
+
+Requires ``source_bootstrap_err.py`` to have been run with the same BSM first.
 
 Usage
 -----
@@ -33,8 +35,9 @@ from astropy.io import fits
 # ---------------------------------------------------------------------------
 # Top-level configuration
 # ---------------------------------------------------------------------------
-SOURCE          = "W3IRS4"                    # Name of target
-BSM             = 5                           # Desired smoothing (BSM in PIIC)
+SOURCE          = "W3IRS4"                       # Name of target
+BSM             = 1                           # Desired smoothing (BSM in PIIC), same as 
+                                              # used in source_bootstrap_err.py
 
 # ---------------------------------------------------------------------------
 # Derived directory paths
@@ -103,7 +106,7 @@ for ax, (label, (y_pix, x_pix)) in zip(axes, pixels.items()):
     ax.plot(indices, np.sqrt(cov_i[:, 1, 1]), color='tab:red', label='Stokes Q')
     ax.plot(indices, np.sqrt(cov_i[:, 2, 2]), color='tab:blue', label='Stokes U')
     ax.set_xlabel("Number of bootstrap realisations")
-    ax.set_ylabel("STD at pixel")
+    ax.set_ylabel("Standard deviation at pixel")
     ax.set_title(f"{label} pixel (y={y_pix}, x={x_pix})")
     ax.legend()
 

@@ -1,0 +1,77 @@
+cxnohup: ignoring input
+findfont: Failed to find font weight bold, now using 400.
+findfont: Failed to find font weight bold, now using 400.
+findfont: Failed to find font weight bold, now using 400.
+findfont: Failed to find font weight bold, now using 400.
+findfont: Failed to find font weight bold, now using 400.
+findfont: Failed to find font weight bold, now using 400.
+findfont: Failed to find font weight bold, now using 400.
+findfont: Failed to find font weight bold, now using 400.
+findfont: Failed to find font weight bold, now using 400.
+findfont: Failed to find font weight bold, now using 400.
+Source: W3IRS4
+Active stages: {'combine', 'select', 'refine', 'correct', 'write_lists'}
+Found 36 science scans in /home/manon/redNIKA2pol/reductions/W3IRS4/03_corr/red_uncorr
+WARNING: skipping 3 calibrator(s) missing their a3 file: ['20260216s105', '20260115s110', '20260228s130']
+Calibrator catalogue: 391 entries found in /home/manon/redNIKA2pol/reductions/W3IRS4/03_corr/red_calibrators
+  20260222s130: elev=63.42° -> 16 matching calibrators
+  20260222s131: elev=63.89° -> 15 matching calibrators
+  20260222s132: elev=64.25° -> 19 matching calibrators
+  20260222s133: elev=64.46° -> 16 matching calibrators
+  20260222s134: elev=64.74° -> 14 matching calibrators
+  20260222s135: elev=64.88° -> 14 matching calibrators
+  20260222s141: elev=64.52° -> 17 matching calibrators
+  20260222s142: elev=64.25° -> 19 matching calibrators
+  20260222s143: elev=63.86° -> 15 matching calibrators
+  20260222s144: elev=63.46° -> 17 matching calibrators
+  20260222s145: elev=62.98° -> 16 matching calibrators
+  20260222s146: elev=62.41° -> 13 matching calibrators
+  20260222s177: elev=52.07° -> 21 matching calibrators
+  20260222s178: elev=51.08° -> 22 matching calibrators
+  20260222s179: elev=50.05° -> 17 matching calibrators
+  20260222s180: elev=49.17° -> 10 matching calibrators
+  20260222s181: elev=48.15° -> 15 matching calibrators
+  20260222s182: elev=47.08° -> 20 matching calibrators
+  20260223s139: elev=61.57° -> 11 matching calibrators
+  20260223s140: elev=62.23° -> 12 matching calibrators
+  20260223s141: elev=62.81° -> 18 matching calibrators
+  20260223s142: elev=63.21° -> 15 matching calibrators
+  20260223s143: elev=63.71° -> 16 matching calibrators
+  20260223s144: elev=64.09° -> 18 matching calibrators
+  20260223s150: elev=64.80° -> 14 matching calibrators
+  20260223s151: elev=64.95° -> 16 matching calibrators
+  20260223s152: elev=64.96° -> 15 matching calibrators
+  20260223s153: elev=64.90° -> 14 matching calibrators
+  20260223s154: elev=64.81° -> 14 matching calibrators
+  20260223s155: elev=64.59° -> 16 matching calibrators
+  20260223s161: elev=63.46° -> 17 matching calibrators
+  20260223s162: elev=62.98° -> 16 matching calibrators
+  20260223s163: elev=62.41° -> 13 matching calibrators
+  20260223s164: elev=61.85° -> 12 matching calibrators
+  20260223s165: elev=61.21° -> 13 matching calibrators
+  20260223s166: elev=60.49° -> 7 matching calibrators
+Filtering to single science scan: 20260223s166
+
+=== Stage 1: running IP corrections (parallel) ===
+  Nothing to do: all corrections already exist.
+
+=== Stage 2: selecting best calibrators ===
+  20260223s166: best calibrator = 20260224s134 (std = 0.63, max residual = 0.85%)
+  Saved: /home/manon/redNIKA2pol/figures/W3IRS4/best_calibrators/20260223s166_calibrator_selection_std.png
+  Initial std: 0.000
+  Iteration 1: std = 0.000, changed = False
+  Converged.
+  20260223s166: best calibrator = 20260224s134
+  0 scans changed calibrator during refinement
+  Saved: /home/manon/redNIKA2pol/figures/W3IRS4/best_calibrators/all_corr_scans_before_refinement.png
+  Saved: /home/manon/redNIKA2pol/figures/W3IRS4/best_calibrators/all_corr_scans_after_refinement.png
+
+=== Stage 4: writing LIST files ===
+  Saved map list : /home/manon/redNIKA2pol/reductions/W3IRS4/03_corr/all_corr_maps.LIST
+  Saved rgw list : /home/manon/redNIKA2pol/reductions/W3IRS4/03_corr/all_rgw.LIST
+
+=== Stage 5: combining best-calibrated maps ===
+  Running combine_maps
+  Combined map written to /home/manon/redNIKA2pol/reductions/W3IRS4/03_corr/red/W3IRS4_IP_corrected.fits
+
+Done.

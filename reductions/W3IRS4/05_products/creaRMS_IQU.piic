@@ -1,5 +1,14 @@
-!! SB 2025/05/28 version for IQU
-!! needs mainName and 3 polygons (for I,Q,U) [see below]
+! SB 2025/05/28 version for IQU
+
+! 2026/11/04, version edited by Mairi Nonhebel for ease of use in python 
+! wrapper scripts 
+! Changes:
+! - Arguments: 5 instead of 4. Cube, weight cube and the three polygons
+!   are given as full filenames. The weight file no longer has to be
+!   named <mainName>rgw.fits, and ".fits"/".pol" are no longer appended.
+! - Output name taken from IDFBNAME of the input cube (cube now read
+!   before the weights so that IDFBNAME refers to the cube).
+! - Leftover rmsI/Q/U.fits are deleted at the start.
 
 sic\define charact cubeName*256 rgwName*256 polName_I*256 polName_Q*256 polName_U*256 cubeNoFits*256
  

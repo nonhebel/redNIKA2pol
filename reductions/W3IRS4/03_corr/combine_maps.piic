@@ -1,6 +1,8 @@
+! Mairi Nonhebel, adapted from corr_instr_pol.piic 
+! last edit, 2026/11/01 
+
 ! combining individual scans into one map
 ! weighting combination by associated rgw fits
-! (spin off script from piic/pro/corr_instr_pol.piic)
 
 ! Inputs:
 ! -------

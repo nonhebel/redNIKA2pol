@@ -1,20 +1,25 @@
 """
 source_bootstrap_err.py
 --------------------------
-Bootstrap uncertainty across science maps. 
+Bootstrap uncertainty across science maps.
 
 Overview
 --------
-Starting from a set of individually reduced and corrected cubes 
+Starting from a set of individually reduced and corrected cubes
 (Stokes I, Q, U), this script:
 
-  1. Optionally smooths each scan to a target BSM using PIIC. 
+  1. If BSM > 1, smooths each scan to the target BSM using PIIC and combines
+     the full list of smoothed scans into red/{SOURCE}_IP_corrected_bsm{BSM}.fits.
+     This smoothed science map is built the same way as the bootstrap
+     realisations (smooth each scan, then combine), so it is consistent with
+     the bootstrap covariance map. At BSM = 1 the native-resolution science
+     map comes from 03_corr, and no combination is done here.
   2. Draws N_BOOTSTRAP bootstrap resamples of the original scan list and
-     combines each resample into a single map via PIIC. Each bootstrap 
-     realisation uses a fixed random seed equal to its index, so results are 
+     combines each resample into a single map via PIIC. Each bootstrap
+     realisation uses a fixed random seed equal to its index, so results are
      fully reproducible.
   3. Computes a per-pixel 3×3 covariance matrix over Stokes I, Q, U from
-     the full set of bootstrap realisations. 
+     the full set of bootstrap realisations.
 
 Stages
 ------
@@ -25,14 +30,13 @@ Usage
 -----
 Set configuration at the top of the script and then run with
 
-  python source_bootstrap_err.py 
+  python source_bootstrap_err.py
 
-Pass STAGES = {"all"}`` to run everything, or a subset such as
-{"bootstrap"} to run a single stage. 
+Pass STAGES = {"all"} to run everything, or a subset such as
+{"bootstrap"} to run a single stage.
 
 """
 
-import sys
 import os
 import subprocess
 from pathlib import Path
@@ -45,10 +49,10 @@ from astropy.io import fits
 # ---------------------------------------------------------------------------
 # Top-level configuration
 # ---------------------------------------------------------------------------
-SOURCE          = "W3IRS4"                                                              # Name of target
-BSM             = 3                                                                 # Desired smoothing (BSM in PIIC)
-N_BOOTSTRAP     = 5000                                                              # Number of bootstrap realisations
-N_CORES         = 50                                                                # Number of cores to run on
+SOURCE          = "W3IRS4"                                                             # Name of target
+BSM             = 5                                                                 # Desired smoothing (BSM in PIIC, 1 for native resolution)
+N_BOOTSTRAP     = 1000                                                              # Number of bootstrap realisations
+N_CORES         = 20                                                                # Number of cores to run on
 STAGES          = {"all"}                                                           # Pipeline stages to execute
 
 # ---------------------------------------------------------------------------
@@ -86,21 +90,28 @@ def run_bsm(in_dir, out_dir, map_path, bsm_val):
         f"{in_dir} {out_dir} {map_path.name} {bsm_val}; "
         f"rm PIIC*"
     )
-    print("RUN:", command)
-    subprocess.run(command, shell=True, executable="/bin/bash", cwd=base, check=True)
+    subprocess.run(
+        command, shell=True, executable="/bin/bash", cwd=base,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
 
-def run_combination(fits_dir, maps_list, rgw_list, outpath): 
+def run_combination(work_dir, in_dir, out_dir, maps_list, rgw_list, outpath):
     """
-    Execute the combine_maps.piic script to combine a set of maps in list. 
+    Execute the combine_maps.piic script to combine a set of maps in list.
     """
+    script  = os.path.relpath(base / "combine_maps", work_dir)
+    in_rel  = os.path.relpath(in_dir, work_dir)
+    out_rel = os.path.relpath(out_dir, work_dir)
+
     command = (
-        f"source ~/.bashrc; gagpiic; piic -nl @ ../combine_maps "
-        # f"{str(outDir)} {str(inDir)} {maps_list.name} {rgw_list.name} {outpath.name}; "
-        f"../red . {maps_list.name} {rgw_list.name} {outpath.name} ; "
+        f"source ~/.bashrc; gagpiic; piic -nl @ {script} "
+        f"{in_rel} {out_rel} {Path(maps_list).name} {Path(rgw_list).name} {Path(outpath).name} ; "
         f"rm PIIC*"
     )
-    print("RUN:", command)
-    subprocess.run(command, shell=True, executable="/bin/bash", cwd=fits_dir, check=True)
+    subprocess.run(
+        command, shell=True, executable="/bin/bash", cwd=work_dir,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
 
 # ---------------------------------------------------------------------------
 # Bootstrapping procedure
@@ -109,40 +120,48 @@ def run_combination(fits_dir, maps_list, rgw_list, outpath):
 def run_bootstrap(args):
     """
     Run a single bootstrap realisation.
+
+    Returns True on success and False on failure, so that one failed
+    realisation does not stop the others. The run_dir of a failed
+    realisation is kept for inspection.
     """
-    
+
     i, base, maps_list, rgw_list, combined_dir = args
 
     # Skip realisations that are already completed to allow safe restart
     final_combined = combined_dir / f"combined_{i}.fits"
     if final_combined.exists():
-        print(f"[{i}] already exists, skipping")
-        return i
-    
-    # Separate working directory per realisation avoids cross-contamination
-    run_dir = base / f"run_{i}"
-    run_dir.mkdir(parents=True, exist_ok=True)
+        return True
 
-    # Draw bootstrap indices
-    n   = len(maps_list)
-    rng = np.random.default_rng(seed=i)  # random seed so fully reproducible per realisation
-    idx = rng.choice(n, size=n, replace=True)
+    try:
+        # Separate working directory per realisation avoids cross-contamination
+        run_dir = base / f"run_{i}"
+        run_dir.mkdir(parents=True, exist_ok=True)
 
-    maps_list_i = run_dir / 'maps.LIST'
-    rgw_list_i = run_dir / 'rgw.LIST'
-    combined_i = run_dir / 'combined.fits'
+        # Draw bootstrap indices
+        n   = len(maps_list)
+        rng = np.random.default_rng(seed=i)  # random seed so fully reproducible per realisation
+        idx = rng.choice(n, size=n, replace=True)
 
-    # Write lists of bootstrapped maps
-    np.savetxt(maps_list_i, maps_list[idx], fmt="%s")
-    np.savetxt(rgw_list_i, rgw_list[idx], fmt="%s")
+        maps_list_i = run_dir / 'maps.LIST'
+        rgw_list_i = run_dir / 'rgw.LIST'
+        combined_i = run_dir / 'combined.fits'
 
-    # Combine bootstrapped maps
-    run_combination(run_dir, maps_list_i, rgw_list_i, combined_i)
+        # Write lists of bootstrapped maps
+        np.savetxt(maps_list_i, maps_list[idx], fmt="%s")
+        np.savetxt(rgw_list_i, rgw_list[idx], fmt="%s")
 
-    shutil.move(combined_i, final_combined)
-    shutil.rmtree(run_dir)
+        # Combine bootstrapped maps (written to run_dir first, then moved, so a
+        # killed job never leaves a partial file in combined_dir)
+        run_combination(run_dir, red_dir, run_dir, maps_list_i, rgw_list_i, combined_i)
 
-    return i
+        shutil.move(combined_i, final_combined)
+        shutil.rmtree(run_dir)
+
+    except Exception:
+        return False
+
+    return True
 
 # ---------------------------------------------------------------------------
 # Pipeline stages
@@ -153,19 +172,36 @@ def stage_bootstrap(maps_list, rgw_list, base, combined_dir, n_bootstrap, n_core
     Stage 1 - generate bootstrap realisations in parallel.
     """
     print("\n=== Stage 1: bootstrapping over individual corrected maps ===")
-    
+
+    # Only submit realisations that are not yet done
+    todo = [
+        i for i in range(n_bootstrap)
+        if not (combined_dir / f"combined_{i}.fits").exists()
+    ]
+    n_done = n_bootstrap - len(todo)
+    print(f"  {n_done} / {n_bootstrap} realisations already done, {len(todo)} to run")
+    if not todo:
+        return
+
     args = [
         (i, base, maps_list, rgw_list, combined_dir)
-        for i in range(n_bootstrap)
+        for i in todo
     ]
 
+    n_failed = 0
     with Pool(processes=n_cores) as p:
-        for _ in tqdm.tqdm(
-            p.imap_unordered(run_bootstrap, args), 
-            total=n_bootstrap, 
-            desc="Bootstrap realisations"
+        for ok in tqdm.tqdm(
+            p.imap_unordered(run_bootstrap, args),
+            total=len(todo),
+            desc="Bootstrap realisations",
+            unit="map",
         ):
-            pass
+            n_failed += not ok
+
+    n_ok = len(todo) - n_failed
+    print(f"  Completed {n_ok} / {len(todo)} this run ({n_done + n_ok} / {n_bootstrap} in total)")
+    if n_failed:
+        print(f"  {n_failed} realisation(s) failed - rerun the script to retry them")
 
 def stage_covariance(combined_dir, base, bsm):
     """
@@ -173,9 +209,8 @@ def stage_covariance(combined_dir, base, bsm):
     from all bootstrap realisations.
     """
     print("\n=== Stage 2: calculating pixel-by-pixel covariance map ===")
-    
-    boot_maps = []
 
+    boot_maps = []
     for path in combined_dir.glob("*.fits"):
         with fits.open(path, memmap=False) as hdul:
             data = hdul[0].data
@@ -188,12 +223,12 @@ def stage_covariance(combined_dir, base, bsm):
 
     for y in range(ny):
         for x in range(nx):
-            samples = boot_maps[:, :, y, x]          
+            samples = boot_maps[:, :, y, x]
             mask = np.all(np.isfinite(samples), axis=1)
             if mask.sum() > 1:
                 cov_map[y, x] = np.cov(samples[mask].T)
             else:
-                cov_map[y, x] = np.nan 
+                cov_map[y, x] = np.nan
 
     cov_hdu = fits.PrimaryHDU(cov_map)
     cov_hdu.writeto(base / f"cov_map_bsm{bsm}.fits", overwrite=True)
@@ -203,7 +238,7 @@ def stage_covariance(combined_dir, base, bsm):
 # ---------------------------------------------------------------------------
 
 def main():
-    """Smooth scans if need be and run selected stages."""
+    """Smooth scans and combine them if need be, then run selected stages."""
     print("Source:", SOURCE)
     active = {"bootstrap", "covariance"} if "all" in STAGES else STAGES
     print("Active stages:", active)
@@ -211,10 +246,12 @@ def main():
     maps_list = np.loadtxt(base / "all_maps.LIST", dtype=str)
     rgw_list = np.loadtxt(base / "all_rgw.LIST", dtype=str)
 
-    # Performing smoothing of individual scans
     if BSM != 1:
+        # Smoothing individual scans
         bsm_maps_list = base / f"all_maps_bsm{BSM}.LIST"
         bsm_rgw_list = base / f"all_rgw_bsm{BSM}.LIST"
+
+        print(f"  Smoothing scans to BSM {BSM}...")
 
         with open(bsm_maps_list, "w") as f_maps, open(bsm_rgw_list, "w") as f_rgw:
 
@@ -222,7 +259,7 @@ def main():
 
                 bsm_map = map_path.replace(".fits", f"_bsm{BSM}.fits")
                 bsm_rgw = rgw_path.replace(".fits", f"_bsm{BSM}.fits")
-                
+
                 # Checking if bsm files already exist
                 bsm_map_out = red_dir / bsm_map
                 if not bsm_map_out.exists():
@@ -233,12 +270,23 @@ def main():
 
                 f_maps.write(f"{bsm_map}\n")
                 f_rgw.write(f"{bsm_rgw}\n")
-                
+
         print(f"  Saved map list : {bsm_maps_list}")
         print(f"  Saved rgw list : {bsm_rgw_list}")
 
         maps_list = np.loadtxt(bsm_maps_list, dtype=str)
         rgw_list  = np.loadtxt(bsm_rgw_list,  dtype=str)
+
+        # Combining the full list of smoothed scans into the smoothed science
+        final_out = red_dir / f"{SOURCE}_IP_corrected_bsm{BSM}.fits"
+        if final_out.exists():
+            print(f"  {final_out.name} already exists, skipping combination")
+        else:
+            run_combination(base, red_dir, red_dir, bsm_maps_list, bsm_rgw_list, final_out)
+            if final_out.exists():
+                print(f"  Saved smoothed science map : {final_out}")
+            else:
+                print(f"  Combination failed: {final_out.name} was not created")
 
     # Stage 1: bootstrapping
     if "bootstrap" in active:
