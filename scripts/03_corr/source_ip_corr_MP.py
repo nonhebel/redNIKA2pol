@@ -52,7 +52,7 @@ from pathlib import Path
 from astropy.io import fits
 from multiprocessing import Pool
 import matplotlib
-matplotlib.use("Agg")          # save figures without a display (safe after logout)
+matplotlib.use("Agg")          
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import Counter
@@ -69,21 +69,20 @@ SOURCE = "???"
 # "combine"} or {"all"} to run the full pipeline
 STAGES = {"correct", "select", "write_lists", "combine"}
 
-# Save diagnostic figures from each stage, note that if too many candidate 
-# calibrators, may crash if SAVE_FIGURES = TRUE
+# Save diagnostic figures
 SAVE_FIGURES = True
 
 # Maximum elevation difference (degrees) between calibrator and science scan
 ELEV_DIFF = 10
 
-# Flag scans with residuals above this fraction of Imax
+# Flag scans with residuals above this percentage of Imax
 RESIDUAL_THRESHOLD = 5
 
 # Metric used to select and refine the best calibrator per scan
-# Options: "std", "max", "sum" — evaluated over the central CROP_FRAC
+# Options: "stdv", "max", "sum" — evaluated over the central CROP_FRAC
 # of each map
-METRIC = "std"
-CROP_FRAC = 0.2
+METRIC = "stdv"
+CROP_FRAC = 0.5
 
 # Tukey taper radii for the science map [arcsec] — inner, outer
 TAPER_RADII = (250, 500)
@@ -96,10 +95,13 @@ VLIM = 2
 SCIENCE_ID_FILTER = None
 
 # Number of cores to run on
-N_CORES = 10
+N_CORES = 50
 
-# Manually setting repo root in case of unbalanced quote count - see README
-REPO_ROOT = Path.home() / "redNIKA2pol"
+# Leave as None to auto-detect the repo root. Set manually if PIIC/GILDAS
+# gives "unbalanced quote count" errors from long paths - see README.
+REPO_ROOT = None
+# REPO_ROOT = Path.home() / "redNIKA2pol"
+
 
 # ---------------------------------------------------------------------------
 # Matplotlib style
@@ -123,7 +125,7 @@ def find_repo_root(marker="setup.sh"):
         f"Could not find repo root (no {marker} found in any parent directory)"
     )
 
-if REPO_ROOT == None:
+if REPO_ROOT is None:
     repo_root = find_repo_root()
 else:
     repo_root = REPO_ROOT
@@ -132,8 +134,7 @@ base                = repo_root / "reductions" / SOURCE / "03_corr"
 red_dir             = base / "red"
 red_uncorr_dir      = base / "red_uncorr"
 red_calibrators_dir = base / "red_calibrators"
-fig_dir             = repo_root / "figures" / SOURCE / "best_calibrators"
-fig_dir.mkdir(parents=True, exist_ok=True)
+fig_dir             = repo_root / "figures" / SOURCE 
 
 # ---------------------------------------------------------------------------
 # Pipeline command wrappers
@@ -406,150 +407,99 @@ def _run_one_correction(task):
 # Internal figure functions
 # ---------------------------------------------------------------------------   
 
-def _figures_select(science_scans, science_scans_corr, calib_catalogue):
-    """Save a diagnostic figure for every processed science scan.
+def _figures_comparison(
+    science_scans,
+    science_scans_corr,
+    calib_catalogue,
+    assignment,
+    tag,
+    bad_scans=frozenset(),
+    changed_from=None,
+):
+    """Save one figure per Stokes parameter (Q and U) comparing the
+    uncorrected and corrected maps for every science scan.
 
-    Each figure shows Q and U panels for arrays A1 and A3 for all
-    candidate calibrators for a given science scan.
+    Rows are science scans; columns are
+    [A1 uncorrected, A1 corrected, A3 uncorrected, A3 corrected].
+    The corrected map is taken from ``assignment[science_id]``.
     """
-    for science_id, science_meta in science_scans.items():
+    changed_from = changed_from or {}
+    science_ids = list(science_scans.keys())
+    n_rows = len(science_ids)
 
-        n_rows = len(science_meta['candidate_calibrators'])
-        fig, axes = plt.subplots(n_rows, 4, figsize=(16, 4 * n_rows))
-        axes = np.atleast_2d(axes)
+    # Agg can't save images taller than 2^16 px, so lower the dpi when
+    # there are many scans
+    dpi = min(300, int(60000 / (4 * n_rows)))
 
-        col_titles = ["A1 Q", "A1 U", "A3 Q", "A3 U"]
-        cbar_labels = [
-            r"$Q/I_\mathrm{max}$ (%)",
-            r"$U/I_\mathrm{max}$ (%)",
-            r"$Q/I_\mathrm{max}$ (%)",
-            r"$U/I_\mathrm{max}$ (%)",
+    for stokes, idx in (("Q", 1), ("U", 2)):
+        col_titles = [
+            f"A1 {stokes} uncorrected", f"A1 {stokes} corrected",
+            f"A3 {stokes} uncorrected", f"A3 {stokes} corrected",
         ]
+        cbar_label = rf"${stokes}/I_\mathrm{{max}}$ (%)"
 
-        for row_idx, calib_id in enumerate(
-            science_meta['candidate_calibrators']
-        ):
-
-            I1, Q1, U1 = science_scans_corr[science_id][calib_id]["iqu_a1"]
-            I3, Q3, U3 = science_scans_corr[science_id][calib_id]["iqu_a3"]
-            panels = [
-                    Q1 / np.nanmax(I1) * 100,
-                    U1 / np.nanmax(I1) * 100,
-                    Q3 / np.nanmax(I3) * 100,
-                    U3 / np.nanmax(I3) * 100,
-            ]
-
-            for col_idx, panel in enumerate(panels):
-                 plot_map(
-                    axes[row_idx, col_idx], 
-                    panel, 
-                    title=col_titles[col_idx] if row_idx == 0 else None,
-                    cbar_label=cbar_labels[col_idx]
-                )
-            
-            axes[row_idx, 0].set_ylabel(calib_id, fontsize=14)
-            elev_str = f"science = {science_scans[science_id]['elev']:.1f}°"
-            if calib_id != 'Uncorrected':
-                elev = calib_catalogue[calib_id]['elev']
-                elev_str += f"\ncalib = {elev:.1f}°"
-            axes[row_idx, 0].text(
-                0.05,
-                0.95,
-                elev_str,
-                transform=axes[row_idx, 0].transAxes,
-                va="top",
-            )
-                
-        best_row = science_meta['candidate_calibrators'].index(
-            science_meta['best_calib']
+        fig, axes = plt.subplots(
+            n_rows, 4, figsize=(16, 4 * n_rows), squeeze=False
         )
-        highlight_axes(axes[best_row], color="tab:blue")
+
+        for row, science_id in enumerate(science_ids):
+            calib_id = assignment[science_id]
+            uncorr = science_scans_corr[science_id]["Uncorrected"]
+            corr = science_scans_corr[science_id][calib_id]
+
+            # Column order: A1 uncorr, A1 corr, A3 uncorr, A3 corr
+            panels = []
+            for array in ("a1", "a3"):
+                for entry in (uncorr, corr):
+                    iqu = entry[f"iqu_{array}"]
+                    panels.append(iqu[idx] / np.nanmax(iqu[0]) * 100)
+
+            for col, panel in enumerate(panels):
+                plot_map(
+                    axes[row, col],
+                    panel,
+                    title=col_titles[col] if row == 0 else None,
+                    cbar_label=cbar_label,
+                )
+
+            # Row label + annotations
+            axes[row, 0].set_ylabel(science_id, fontsize=14)
+            science_elev = science_scans[science_id]["elev"]
+            if calib_id == "Uncorrected":
+                corr_str = "calib: none"
+            else:
+                calib_elev = calib_catalogue[calib_id]["elev"]
+                corr_str = f"calib: {calib_id}\nelev = {calib_elev:.1f}°"
+            if science_id in changed_from:
+                corr_str += f"\nwas: {changed_from[science_id]}"
+
+            for col in (0, 2):
+                axes[row, col].text(
+                    0.05, 0.95, f"elev = {science_elev:.1f}°",
+                    transform=axes[row, col].transAxes, va="top",
+                )
+            for col in (1, 3):
+                axes[row, col].text(
+                    0.05, 0.95, corr_str,
+                    transform=axes[row, col].transAxes, va="top",
+                )
+
+            if science_id in bad_scans:
+                highlight_axes(axes[row], color="tab:red")
+            elif science_id in changed_from:
+                highlight_axes(axes[row], color="tab:orange")
 
         fig.suptitle(
-            f"Science scan: {science_id}",
+            f"{SOURCE}: Stokes {stokes}, uncorrected vs corrected "
+            f"({tag}, {METRIC})",
             fontsize=16,
             y=1.0 + (0.3 / (4 * n_rows)),
         )
         fig.tight_layout()
-        out_path = fig_dir / f"{science_id}_calibrator_selection_{METRIC}.png"
-        fig.savefig(out_path, bbox_inches="tight", dpi=300)
-        plt.close(fig)
-        print(f"  Saved: {out_path}")
-
-def _figures_refine(
-    science_scans,
-    science_scans_corr, 
-    calib_catalogue, 
-    assignment_initial,
-    assignment_final
-):
-    """Save diagnostic figures showing all corrected science scans before
-    and after refinement."""
-
-    science_ids = list(science_scans.keys())
-    n_rows = len(science_ids)
-    col_titles = ["A1 Q", "A1 U", "A3 Q", "A3 U"]
-    cbar_labels = [
-        r"$Q/I_\mathrm{max}$ (%)",
-        r"$U/I_\mathrm{max}$ (%)",
-        r"$Q/I_\mathrm{max}$ (%)",
-        r"$U/I_\mathrm{max}$ (%)",
-    ]
-
-    changed_ids = {
-        sid for sid in science_ids
-        if assignment_initial[sid] != assignment_final[sid]
-    }
-
-    for label, assignment in [
-        ("before", assignment_initial),
-        ("after", assignment_final),
-    ]:
-
-        fig, axes = plt.subplots(n_rows, 4, figsize=(16, 4 * n_rows))
-        axes = np.atleast_2d(axes)
-
-        for row_idx, science_id in enumerate(science_ids):
-            calib_id = assignment[science_id]
-            I1, Q1, U1 = science_scans_corr[science_id][calib_id]["iqu_a1"]
-            I3, Q3, U3 = science_scans_corr[science_id][calib_id]["iqu_a3"]
-            panels = [
-                Q1 / np.nanmax(I1) * 100,
-                U1 / np.nanmax(I1) * 100,
-                Q3 / np.nanmax(I3) * 100,
-                U3 / np.nanmax(I3) * 100,
-            ]
-
-            for col_idx, panel in enumerate(panels):
-                plot_map(
-                    axes[row_idx, col_idx],
-                    panel,
-                    title=col_titles[col_idx] if row_idx == 0 else None,
-                    cbar_label=cbar_labels[col_idx]
-                )
-
-            axes[row_idx, 0].set_ylabel(
-                f"science: {science_id}\ncalib:{calib_id}",
-                fontsize=10,
-            )
-            elev_str = f"science = {science_scans[science_id]['elev']:.1f}°"
-            if calib_id != 'Uncorrected':
-                elev = calib_catalogue[calib_id]['elev']
-                elev_str += f"\ncalib = {elev:.1f}°"
-            axes[row_idx, 0].text(
-                0.05,
-                0.95,
-                elev_str,
-                transform=axes[row_idx, 0].transAxes,
-                va="top",
-            )
-            
-            if science_id in changed_ids:
-                highlight_axes(axes[row_idx], color="tab:orange")
-
-        fig.tight_layout()
-        out_path = fig_dir / f"all_corr_scans_{label}_refinement.png"
-        fig.savefig(out_path, bbox_inches="tight", dpi=300)
+        out_path = (
+            fig_dir / f"{SOURCE}_{stokes}_uncorr_vs_corr_{tag}_{METRIC}.png"
+        )
+        fig.savefig(out_path, bbox_inches="tight", dpi=dpi)
         plt.close(fig)
         print(f"  Saved: {out_path}")
 
@@ -637,7 +587,7 @@ def stage_select(science_scans, calib_catalogue):
     print("\n=== Stage 2: selecting best calibrators ===")
 
     metric_funcs = {
-        "std": np.nanstd,
+        "stdv": np.nanstd,
         "max": lambda x: np.nanmax(np.abs(x)),
         "sum": lambda x: np.nansum(np.abs(x)),
     }
@@ -721,7 +671,13 @@ def stage_select(science_scans, calib_catalogue):
         )
 
     if SAVE_FIGURES:
-        _figures_select(science_scans, science_scans_corr, calib_catalogue)
+        assignment = {
+            sid: meta["best_calib"] for sid, meta in science_scans.items()
+        }
+        _figures_comparison(
+            science_scans, science_scans_corr, calib_catalogue,
+            assignment, tag="select", bad_scans=bad_scans,
+        )
 
     return science_scans, science_scans_corr, bad_scans
 
@@ -840,12 +796,13 @@ def stage_refine(
         print(f"{changed_id}: {old}->{new}")
 
     if SAVE_FIGURES:
-        _figures_refine(
-            science_scans,
-            science_scans_corr,
-            calib_catalogue,
-            assignment_initial,
-            assignment_final,
+        changed_from = {
+            sid: assignment_initial[sid] for sid in changed_ids
+        }
+        _figures_comparison(
+            science_scans, science_scans_corr, calib_catalogue,
+            assignment_final, tag="refine", bad_scans=bad_scans,
+            changed_from=changed_from,
         )
 
     return science_scans
@@ -853,59 +810,56 @@ def stage_refine(
 def stage_write_lists(science_scans, science_scans_corr):
     """Stage 4 — write LIST files of best-corrected maps and rgw weight
     files.
-
+ 
     For each science scan the best-calibrator corrected maps (arrays A1 and
-    A3) are collected and written to ``all_corr_maps.LIST``. The
-    corresponding rgw weight files are located in ``red_uncorr_dir``,
-    symlinked into ``red_dir``, and written to ``all_rgw.LIST``. Both files
-    are written to ``base``.
+    A3) are written to ``all_corr_maps.LIST``. The corresponding rgw weight
+    files share the uncorrected map name with ``rgw`` appended
+    (``..._0s.fits`` -> ``..._0srgw.fits``); they are located in
+    ``red_uncorr_dir``, symlinked into ``red_dir``, and written to
+    ``all_rgw.LIST``. Both files are written to ``base``.
     """
     print("\n=== Stage 4: writing LIST files ===")
-
-    best_scans = []
-    for science_id, science_meta in science_scans.items():
-        best_calib = science_meta['best_calib']
-        a1_path = science_scans_corr[science_id][best_calib]["path_a1"]
-        a3_path = science_scans_corr[science_id][best_calib]["path_a3"]
-        best_scans.append(a1_path)
-        best_scans.append(a3_path)
-
+ 
     maps_path = base / "all_corr_maps.LIST"
     rgw_path  = base / "all_rgw.LIST"
-
+ 
     with open(maps_path, "w") as f_maps, open(rgw_path, "w") as f_rgw:
-        for scan_path in best_scans:
-            f_maps.write(f"{scan_path.name}\n")
-            rgw_name = scan_path.name.split("_0s")[0] + "_0srgw.fits"
-            rgw = red_uncorr_dir / rgw_name
-            dst = red_dir / rgw_name
-            if not dst.exists() and not dst.is_symlink():
-                os.symlink(rgw, dst)
-            f_rgw.write(f"{rgw_name}\n")
-
+        for science_id, science_meta in science_scans.items():
+            best_calib = science_meta['best_calib']
+            for array in ("a1", "a3"):
+                corr_path = science_scans_corr[science_id][best_calib][f"path_{array}"]
+                rgw_name  = f"{science_meta[f'path_{array}'].stem}rgw.fits"
+ 
+                f_maps.write(f"{corr_path.name}\n")
+                f_rgw.write(f"{rgw_name}\n")
+ 
+                dst = red_dir / rgw_name
+                if not dst.exists() and not dst.is_symlink():
+                    os.symlink(red_uncorr_dir / rgw_name, dst)
+ 
     print(f"  Saved map list : {maps_path}")
     print(f"  Saved rgw list : {rgw_path}")
-
+ 
 def stage_combine():
     """Stage 5 — co-add the best IP-corrected maps using
     ``combine_maps.piic``.
-
+ 
     Reads the LIST files written by :func:`stage_write_lists` and passes
     them to :func:`run_combination`. The combined output is written as
     ``{SOURCE}_IP_corrected.fits``.
     """
     print("\n=== Stage 5: combining best-calibrated maps ===")
-
+ 
     maps_path = "all_corr_maps.LIST"
     rgw_path  = "all_rgw.LIST"
     combined_output = f"{SOURCE}_IP_corrected.fits"
     out = red_dir / combined_output
     log_path = base / "combine.log"
-
+ 
     out.unlink(missing_ok=True)   # remove any old result first
-
+ 
     run_combination(maps_path, rgw_path, combined_output)
-
+ 
     if out.exists():
         log_path.unlink(missing_ok=True)
         print(f"  Combined map written to {out}")
