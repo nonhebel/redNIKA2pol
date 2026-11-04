@@ -22,26 +22,26 @@ To get started, first clone this repository with:
 
 After cloning, the repo will have the following structure:
 
-redNIKA2pol/
-├── figures/
-├── ip_db/
-├── raw/
-├── reductions/
-│   └── <target>/
-│       ├── 01_general/
-│       ├── 02_individual/
-│       ├── 03_corr/
-│       ├── 04_bootstrap/
-│       └── 05_products/
-├── scripts/
-│   ├── 01_general/
-│   ├── 02_individual/
-│   ├── 03_corr/
-│   ├── 04_bootstrap/
-│   └── 05_products/
-├── README.md
-├── requirements.txt
-└── setup.sh
+    redNIKA2pol/
+    ├── figures/
+    ├── ip_db/
+    ├── raw/
+    ├── reductions/
+    │   └── <target>/
+    │       ├── 01_general/
+    │       ├── 02_individual/
+    │       ├── 03_corr/
+    │       ├── 04_bootstrap/
+    │       └── 05_products/
+    ├── scripts/
+    │   ├── 01_general/
+    │   ├── 02_individual/
+    │   ├── 03_corr/
+    │   ├── 04_bootstrap/
+    │   └── 05_products/
+    ├── README.md
+    ├── requirements.txt
+    └── setup.sh
 
 The repo is currently set up for the target W3IRS4 as an example (final .FITS files omitted as the data remains unpublished). To generate the same file tree for another target, open up the setup.sh script. Enter your target name and execute the script with `./setup.sh`. This will create the same structure as above for your given target, with the necessary scripts for each step of the pipeline where they need to be. Note all scripts should be executed within the directories in which they are found. Download the database of instrumental polarisation patterns from https://www.iram.fr/~berta/IP_corr_DB_202201_202608.tgz and place the scans in `ip_db/`. 
 
