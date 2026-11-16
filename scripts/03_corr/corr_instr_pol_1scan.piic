@@ -93,8 +93,6 @@ sic\define double taper_radius2_k	! radius2 of Tukey taper mask for the kernel i
 sic\define double taper_radius1_kf	! radius1 of Tukey taper mask for the kernel in Fourier space [m]
 sic\define double taper_radius2_kf	! radius2 of Tukey taper mask for the kernel in Fourier space [m]
 
-let taper_radius1_m 250. 		! [arcsec] to be edited ad hoc for input science maps
-let taper_radius2_m 500. 		! [arcsec] to be edited ad hoc for input science maps
 let taper_radius1_k 60.			! [arcsec] already optimized for the point-like kernel
 let taper_radius2_k 70.			! [arcsec] already optimized for the point-like kernel
 let taper_radius1_kf 22.		! [m] already optimized for the point-like kernel
