@@ -199,53 +199,75 @@ def highlight_axes(axes, color, linewidth = 3):
             spine.set_edgecolor(color)
             spine.set_linewidth(linewidth)
 
+ARRAYS = ("a1", "a3")
+
 def find_science_scans(directory):
     """Find science scans in ``directory``.
 
-    Expects files named ``...-1-{scanID}_...0s.fits`` (array 1); the matching
-    array-3 file is assumed to have ``-3-`` in place of ``-1-``.
+    Array 1 files are ``...-1-{scanID}_...0s.fits`` and array 3 files are
+    ``...-3-{scanID}_...0s.fits``. The two arrays are globbed separately and
+    matched by scan ID, so a scan may have only a1, only a3, or both. Each
+    entry has ``arrays`` (the arrays present, in a1, a3 order) and a
+    ``path_aN`` for each. The elevation is read from a1 if present, else a3.
     """
+    patterns = {"a1": ("*-1-*0s.fits", "-1-"), "a3": ("*-3-*0s.fits", "-3-")}
     science_scans = {}
-    for path in sorted(directory.glob("*-1-*0s.fits")):
-        parts = path.name.split("-1-")
-        science_id = parts[1].split("_")[0]
-        with fits.open(path) as hdul:
-            header = hdul[0].header
-        science_scans[science_id] = {
-            "path_a1": path,
-            "path_a3": Path(str(path).replace("-1-", "-3-")),
-            "elev":   header.get("ELEND", np.nan)
-        }
+    for array in ARRAYS:
+        glob_pattern, sep = patterns[array]
+        for path in sorted(directory.glob(glob_pattern)):
+            science_id = path.name.split(sep)[1].split("_")[0]
+            with fits.open(path) as hdul:
+                elev = hdul[0].header.get("ELEND", np.nan)
+            meta = science_scans.setdefault(
+                science_id, {"arrays": [], "elev": np.nan}
+            )
+            meta["arrays"].append(array)
+            meta[f"path_{array}"] = path
+            if np.isnan(meta["elev"]):
+                meta["elev"] = elev
     print(f"Found {len(science_scans)} science scans in {directory}")
+    single = {
+        sid: meta["arrays"] for sid, meta in science_scans.items()
+        if len(meta["arrays"]) < len(ARRAYS)
+    }
+    if single:
+        print(f"WARNING: {len(single)} science scan(s) have only one array "
+              f"(they will be processed with that array alone): {single}")
     return science_scans
 
 def build_calib_catalogue(directory):
     """Build catalogue of calibrator scans from ``directory``.
 
-    Expects files named ``{OBJECT}_{scanID}_a1_...n10.fits``
-    (e.g. ``Neptune_20250214s130_a1_...``); the matching array-3 file is
-    assumed to have ``_a3_`` in place of ``_a1_``.
+    Expects files named ``{OBJECT}_{scanID}_a1_...n10.fits`` and
+    ``{OBJECT}_{scanID}_a3_...n10.fits`` (e.g.
+    ``Neptune_20250214s130_a1_...``). Arrays are globbed separately and
+    matched by scan ID; each entry has ``arrays`` listing which are present.
+    A calibrator is only used for science scans whose arrays it covers (see
+    :func:`find_candidate_calibrators`).
     """
     catalogue = {}
-    skipped = []
-    for path in sorted(directory.glob("*_a1_*n10.fits")):
-        calib_id = path.name.split("_")[1]
-        path_a3 = Path(str(path).replace("_a1_", "_a3_"))
-        if not path_a3.exists():
-            skipped.append(calib_id)
-            continue
-        with fits.open(path) as hdul:
-            header = hdul[0].header
-        catalogue[calib_id] = {
-            "path_a1": path,
-            "path_a3": path_a3,
-            "object": header.get("OBJECT", ""),
-            "elev":   header.get("ELEND", np.nan),
-        }
-    if skipped:
+    for array in ARRAYS:
+        for path in sorted(directory.glob(f"*_{array}_*n10.fits")):
+            calib_id = path.name.split("_")[1]
+            with fits.open(path) as hdul:
+                header = hdul[0].header
+            entry = catalogue.setdefault(calib_id, {
+                "arrays": [],
+                "object": header.get("OBJECT", ""),
+                "elev":   np.nan,
+            })
+            entry["arrays"].append(array)
+            entry[f"path_{array}"] = path
+            if np.isnan(entry["elev"]):
+                entry["elev"] = header.get("ELEND", np.nan)
+    single = {
+        cid: meta["arrays"] for cid, meta in catalogue.items()
+        if len(meta["arrays"]) < len(ARRAYS)
+    }
+    if single:
         print(
-            f"WARNING: skipping {len(skipped)} calibrator(s) missing "
-            f"their a3 file: {skipped}"
+            f"WARNING: {len(single)} calibrator(s) have only one array "
+            f"(usable only for science scans with that array alone): {single}"
         )
     print(
         f"Calibrator catalogue: {len(catalogue)} entries found in {directory}"
@@ -260,17 +282,20 @@ def find_candidate_calibrators(
     """Assign candidate calibrators to each science scan.
 
     A calibrator is a candidate if its elevation is within ``elev_diff``
-    degrees of the science scan. The entry ``'Uncorrected'`` is
-    always prepended as a baseline option.
+    degrees of the science scan AND it has every array the science scan has
+    (so one calibrator is always used for all arrays of a scan). The entry
+    ``'Uncorrected'`` is always prepended as a baseline option.
     """
     for science_id, science_meta in science_scans.items():
         science_meta['candidate_calibrators'] = ['Uncorrected'] + [
-            calib_id 
+            calib_id
             for calib_id, calib_meta in calib_catalogue.items()
             if abs(calib_meta["elev"] - science_meta["elev"]) <= elev_diff
+            and set(science_meta["arrays"]) <= set(calib_meta["arrays"])
         ]
         print(
-            f"  {science_id}: elev={science_meta['elev']:.2f}° "
+            f"  {science_id} ({'+'.join(science_meta['arrays'])}): "
+            f"elev={science_meta['elev']:.2f}° "
             f"-> {len(science_meta['candidate_calibrators'])-1} "
             f"matching calibrators"
         )
@@ -282,23 +307,29 @@ def compute_stack_std(science_scans_corr, assignment, exclude=frozenset()):
     For each science scan (excluding those in ``exclude``) the Q and U maps
     are normalised by their Stokes I peak, cropped to the central region,
     and stacked. The function returns the sum of pixel-wise standard
-    deviations across the four array/Stokes combinations.
+    deviations across the array/Stokes combinations. Scans that lack an
+    array simply do not contribute to that array's stacks; empty stacks are
+    skipped.
     """
-    qu_stacks = {"Q_a1": [], "U_a1": [], "Q_a3": [], "U_a3": []}
+    qu_stacks = {
+        f"{stokes}_{array}": [] for array in ARRAYS for stokes in "QU"
+    }
 
     for science_id, calib_id in assignment.items():
         if science_id in exclude:
             continue
-        I1, Q1, U1 = science_scans_corr[science_id][calib_id]["iqu_a1"]
-        I3, Q3, U3 = science_scans_corr[science_id][calib_id]["iqu_a3"]
-        qu_stacks["Q_a1"].append(crop_center(Q1 / np.nanmax(I1)))
-        qu_stacks["U_a1"].append(crop_center(U1 / np.nanmax(I1)))
-        qu_stacks["Q_a3"].append(crop_center(Q3 / np.nanmax(I3)))
-        qu_stacks["U_a3"].append(crop_center(U3 / np.nanmax(I3)))
+        entry = science_scans_corr[science_id][calib_id]
+        for array in ARRAYS:
+            if f"iqu_{array}" not in entry:
+                continue
+            I, Q, U = entry[f"iqu_{array}"]
+            qu_stacks[f"Q_{array}"].append(crop_center(Q / np.nanmax(I)))
+            qu_stacks[f"U_{array}"].append(crop_center(U / np.nanmax(I)))
 
     return sum(
         np.nansum(np.nanstd(np.array(stack), axis=0))
         for stack in qu_stacks.values()
+        if stack
     )
 
 # ---------------------------------------------------------------------------
@@ -317,7 +348,7 @@ def _build_correction_tasks(science_scans, calib_catalogue):
             if calib_id == "Uncorrected":
                 continue
             calib_meta = calib_catalogue[calib_id]
-            for array in ("a1", "a3"):
+            for array in science_meta["arrays"]:
                 science_p = science_meta[f"path_{array}"]
                 calib_p = calib_meta[f"path_{array}"]
                 final_p = red_dir / f"{science_p.stem}_{calib_id}_IP_corrected.fits"
@@ -448,13 +479,26 @@ def _figures_comparison(
             corr = science_scans_corr[science_id][calib_id]
 
             # Column order: A1 uncorr, A1 corr, A3 uncorr, A3 corr
+            # (None where the scan has no data for that array)
             panels = []
-            for array in ("a1", "a3"):
+            for array in ARRAYS:
                 for entry in (uncorr, corr):
-                    iqu = entry[f"iqu_{array}"]
-                    panels.append(iqu[idx] / np.nanmax(iqu[0]) * 100)
+                    iqu = entry.get(f"iqu_{array}")
+                    panels.append(
+                        None if iqu is None
+                        else iqu[idx] / np.nanmax(iqu[0]) * 100
+                    )
 
             for col, panel in enumerate(panels):
+                if panel is None:
+                    ax = axes[row, col]
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    ax.text(0.5, 0.5, f"no {ARRAYS[col // 2].upper()}",
+                            transform=ax.transAxes, ha="center", va="center")
+                    if row == 0:
+                        ax.set_title(col_titles[col])
+                    continue
                 plot_map(
                     axes[row, col],
                     panel,
@@ -474,11 +518,15 @@ def _figures_comparison(
                 corr_str += f"\nwas: {changed_from[science_id]}"
 
             for col in (0, 2):
+                if panels[col] is None:
+                    continue
                 axes[row, col].text(
                     0.05, 0.95, f"elev = {science_elev:.1f}°",
                     transform=axes[row, col].transAxes, va="top",
                 )
             for col in (1, 3):
+                if panels[col] is None:
+                    continue
                 axes[row, col].text(
                     0.05, 0.95, corr_str,
                     transform=axes[row, col].transAxes, va="top",
@@ -520,8 +568,9 @@ def stage_correct(science_scans, calib_catalogue):
     scan_bars = {}
     failures = []
 
+    n_maps = len({t[1] for t in tasks})
     print(f"  {len(tasks)} corrections over {len(totals)} science IDs "
-      f"({2 * len(totals)} A1/A3 maps)")
+      f"({n_maps} science maps)")
 
     sys.stdout.reconfigure(line_buffering=True)
     interactive = sys.stderr.isatty()
@@ -570,8 +619,10 @@ def stage_select(science_scans, calib_catalogue):
     scan.
 
     For each science scan and each candidate calibrator, loads the
-    IP-corrected maps, computes a residual metric (``METRIC``, summed over
-    Q and U for both arrays), and computes the peak absolute residual.
+    IP-corrected maps, computes a residual metric (``METRIC``, averaged over
+    the Q and U panels of whichever arrays the scan has), and computes the
+    peak absolute residual. Candidates whose corrected files are missing
+    (failed stage 1) are dropped with a warning.
     The calibrator with the lowest metric is selected as ``'best_calib'``.
 
     Scans whose *selected* best-calibrator correction still has a
@@ -600,49 +651,60 @@ def stage_select(science_scans, calib_catalogue):
     for science_id, science_meta in science_scans.items():
         science_scans_corr[science_id] = {}
         
+        arrays = science_meta['arrays']
+        dropped = []
+
         for calib_id in science_meta['candidate_calibrators']:
 
+            # Path of the (un)corrected map for each array this scan has
             if calib_id == 'Uncorrected':
-                path_a1 = science_meta['path_a1']
-                path_a3 = science_meta['path_a3']
+                paths = {a: science_meta[f'path_{a}'] for a in arrays}
             else:
-                corr_name_a1 = (
-                    science_meta['path_a1'].stem
-                    + f"_{calib_id}_IP_corrected.fits"
-                )
-                corr_name_a3 = (
-                    science_meta['path_a3'].stem
-                    + f"_{calib_id}_IP_corrected.fits"
-                )
-                path_a1 = red_dir / corr_name_a1
-                path_a3 = red_dir / corr_name_a3
+                paths = {
+                    a: red_dir / (
+                        science_meta[f'path_{a}'].stem
+                        + f"_{calib_id}_IP_corrected.fits"
+                    )
+                    for a in arrays
+                }
 
-            iqu_a1 = load_iqu(path_a1)
-            iqu_a3 = load_iqu(path_a3)
+            # A failed correction in stage 1 leaves a file missing: drop
+            # this candidate rather than crash
+            missing = [p.name for p in paths.values() if not p.exists()]
+            if missing:
+                print(f"  WARNING: {science_id}: dropping calibrator "
+                      f"{calib_id}, missing corrected file(s): {missing}")
+                dropped.append(calib_id)
+                continue
 
-            I1, Q1, U1 = iqu_a1
-            I3, Q3, U3 = iqu_a3
+            entry = {}
+            norm_crops = []   # cropped, I-normalised Q and U (%) per array
+            for array, path in paths.items():
+                I, Q, U = load_iqu(path)
+                entry[f'path_{array}'] = path
+                entry[f'iqu_{array}'] = (I, Q, U)
+                norm_crops += [
+                    crop_center(Q / np.nanmax(I) * 100),
+                    crop_center(U / np.nanmax(I) * 100),
+                ]
 
-            # Cropped normalised panels
-            norm_crops = [
-                crop_center(Q1 / np.nanmax(I1) * 100),
-                crop_center(U1 / np.nanmax(I1) * 100),
-                crop_center(Q3 / np.nanmax(I3) * 100),
-                crop_center(U3 / np.nanmax(I3) * 100),
-            ]
-
+            # Mean over panels (not sum) so the value is comparable between
+            # scans with one array and scans with two. The argmin within a
+            # scan is unaffected.
             metric_fn = metric_funcs[METRIC]
-            metric = sum(metric_fn(nc) for nc in norm_crops)
-            max_residual = max(np.nanmax(np.abs(nc)) for nc in norm_crops)
+            entry['metric'] = (
+                sum(metric_fn(nc) for nc in norm_crops) / len(norm_crops)
+            )
+            entry['max_residual'] = max(
+                np.nanmax(np.abs(nc)) for nc in norm_crops
+            )
+            science_scans_corr[science_id][calib_id] = entry
 
-            science_scans_corr[science_id][calib_id] = {
-                'path_a1': path_a1,
-                'path_a3': path_a3,
-                'iqu_a1': iqu_a1,
-                'iqu_a3': iqu_a3,
-                'metric': metric,
-                'max_residual': max_residual
-            }
+        # Keep candidate list consistent with what could be loaded
+        science_meta['candidate_calibrators'] = [
+            c for c in science_meta['candidate_calibrators']
+            if c not in dropped
+        ]
 
         # Select calibrator with lowest metric
         best_calib = min(
@@ -652,7 +714,8 @@ def stage_select(science_scans, calib_catalogue):
 
         best = science_scans_corr[science_id][best_calib]
         print(
-            f"  {science_id}: best calibrator = {best_calib} "
+            f"  {science_id} ({'+'.join(arrays)}): "
+            f"best calibrator = {best_calib} "
             f"({METRIC} = {best['metric']:.2f}, "
             f"max residual = {best['max_residual']:.2f}%)"
         )
@@ -826,10 +889,16 @@ def stage_write_lists(science_scans, science_scans_corr):
     with open(maps_path, "w") as f_maps, open(rgw_path, "w") as f_rgw:
         for science_id, science_meta in science_scans.items():
             best_calib = science_meta['best_calib']
-            for array in ("a1", "a3"):
+            for array in science_meta["arrays"]:
                 corr_path = science_scans_corr[science_id][best_calib][f"path_{array}"]
                 rgw_name  = f"{science_meta[f'path_{array}'].stem}rgw.fits"
- 
+
+                # A map without its rgw file would break combine_maps
+                if not (red_uncorr_dir / rgw_name).exists():
+                    print(f"  WARNING: {science_id} {array}: {rgw_name} "
+                          f"not found in {red_uncorr_dir}, skipping this map")
+                    continue
+
                 f_maps.write(f"{corr_path.name}\n")
                 f_rgw.write(f"{rgw_name}\n")
  
@@ -888,7 +957,7 @@ def main():
     science_scans = find_candidate_calibrators(science_scans, calib_catalogue)
 
     for meta in science_scans.values():
-        for array in ("a1", "a3"):
+        for array in meta["arrays"]:
             src = meta[f"path_{array}"]
             dst = red_dir / src.name
             if not dst.exists() and not dst.is_symlink():
